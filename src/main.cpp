@@ -2,7 +2,8 @@
 #define MQTT_ENABLE
 #define FTP_ENABLE
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
-#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+//#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+#define REMOTE_DEBUG_ENABLE
 
 #include <ESP32Encoder.h>
 #include "Arduino.h"
@@ -31,7 +32,9 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <nvsDump.h>
-
+#ifdef REMOTE_DEBUG_ENABLE
+    #include <RemoteDebug.h>
+#endif
 
 
 // Info-docs:
@@ -171,6 +174,7 @@ bool enableMqtt = true;
     uint8_t const stillOnlineInterval = 60;                 // Interval 'I'm still alive' is sent via MQTT (in seconds)
 #endif
 // RFID
+#define RFID_SCAN_INTERVALL 300; //in ms
 uint8_t const cardIdSize = 4;                           // RFID
 // Volume
 uint8_t maxVolume = 21;                                 // Maximum volume that can be adjusted
@@ -231,26 +235,29 @@ bool accessPointStarted = false;
 
 // MQTT-configuration
 char mqtt_server[16] = "192.168.2.43";                  // IP-address of MQTT-server (if not found in NVS this one will be taken)
+char mqttUser[15] = "mqtt-user";                        // MQTT-user
+char mqttPassword[15] = "mqtt-password";                // MQTT-password
+
 #ifdef MQTT_ENABLE
     #define DEVICE_HOSTNAME "ESP32-Tonuino"                 // Name that that is used for MQTT
-    static const char topicSleepCmnd[] PROGMEM = "Cmnd/Tonuino/Sleep";
-    static const char topicSleepState[] PROGMEM = "State/Tonuino/Sleep";
-    static const char topicTrackCmnd[] PROGMEM = "Cmnd/Tonuino/Track";
-    static const char topicTrackState[] PROGMEM = "State/Tonuino/Track";
-    static const char topicTrackControlCmnd[] PROGMEM = "Cmnd/Tonuino/TrackControl";
-    static const char topicLoudnessCmnd[] PROGMEM = "Cmnd/Tonuino/Loudness";
-    static const char topicLoudnessState[] PROGMEM = "State/Tonuino/Loudness";
-    static const char topicSleepTimerCmnd[] PROGMEM = "Cmnd/Tonuino/SleepTimer";
-    static const char topicSleepTimerState[] PROGMEM = "State/Tonuino/SleepTimer";
-    static const char topicState[] PROGMEM = "State/Tonuino/State";
-    static const char topicCurrentIPv4IP[] PROGMEM = "State/Tonuino/IPv4";
-    static const char topicLockControlsCmnd[] PROGMEM ="Cmnd/Tonuino/LockControls";
-    static const char topicLockControlsState[] PROGMEM ="State/Tonuino/LockControls";
-    static const char topicPlaymodeState[] PROGMEM = "State/Tonuino/Playmode";
-    static const char topicRepeatModeCmnd[] PROGMEM = "Cmnd/Tonuino/RepeatMode";
-    static const char topicRepeatModeState[] PROGMEM = "State/Tonuino/RepeatMode";
-    static const char topicLedBrightnessCmnd[] PROGMEM = "Cmnd/Tonuino/LedBrightness";
-    static const char topicLedBrightnessState[] PROGMEM = "State/Tonuino/LedBrightness";
+    static const char topicSleepCmnd[] PROGMEM = "Tonuino/Cmd/Sleep";
+    static const char topicSleepState[] PROGMEM = "Tonuino/State/Sleep";
+    static const char topicTrackCmnd[] PROGMEM = "Tonuino/Cmd/Track";
+    static const char topicTrackState[] PROGMEM = "Tonuino/State/Track";
+    static const char topicTrackControlCmnd[] PROGMEM = "Tonuino/Cmd/TrackControl";
+    static const char topicLoudnessCmnd[] PROGMEM = "Tonuino/Cmd/Volume";
+    static const char topicLoudnessState[] PROGMEM = "Tonuino/State/Volume";
+    static const char topicSleepTimerCmnd[] PROGMEM = "Tonuino/Cmd/SleepTimer";
+    static const char topicSleepTimerState[] PROGMEM = "Tonuino/State/SleepTimer";
+    static const char topicState[] PROGMEM = "Tonuino/State/State";
+    static const char topicCurrentIPv4IP[] PROGMEM = "Tonuino/State/IPv4";
+    static const char topicLockControlsCmnd[] PROGMEM ="Tonuino/Cmd/LockControls";
+    static const char topicLockControlsState[] PROGMEM ="Tonuino/State/LockControls";
+    static const char topicPlaymodeState[] PROGMEM = "Tonuino/State/Playmode";
+    static const char topicRepeatModeCmnd[] PROGMEM = "Tonuino/Cmd/RepeatMode";
+    static const char topicRepeatModeState[] PROGMEM = "Tonuino/State/RepeatMode";
+    static const char topicLedBrightnessCmnd[] PROGMEM = "Tonuino/Cmd/LedBrightness";
+    static const char topicLedBrightnessState[] PROGMEM = "Tonuino/State/LedBrightness";
 #endif
 
 char stringDelimiter[] = "#";                               // Character used to encapsulate data in linear NVS-strings (don't change)
@@ -279,6 +286,11 @@ TaskHandle_t rfid;
 // FTP
 #ifdef FTP_ENABLE
     FtpServer ftpSrv;
+#endif
+
+// Remote Debugger
+#ifdef REMOTE_DEBUG_ENABLE
+    RemoteDebug Debug;
 #endif
 
 // Info: SSID / password are stored in NVS
@@ -369,14 +381,22 @@ wl_status_t wifiManager(void);
 /* Wrapper-Funktion for Serial-logging (with newline) */
 void loggerNl(const char *str, const uint8_t logLevel) {
   if (serialDebug >= logLevel) {
-    Serial.println(str);
+      #ifdef REMOTE_DEBUG_ENABLE
+          Debug.println(str);
+      #else
+          Serial.println(str);
+      #endif
   }
 }
 
 /* Wrapper-Funktion for Serial-Logging (without newline) */
 void logger(const char *str, const uint8_t logLevel) {
   if (serialDebug >= logLevel) {
-    Serial.print(str);
+      #ifdef REMOTE_DEBUG_ENABLE
+          Debug.printf(str);
+      #else
+          Serial.println(str);
+      #endif
   }
 }
 
@@ -577,7 +597,7 @@ bool reconnect() {
     loggerNl(logBuf, LOGLEVEL_NOTICE);
 
     // Try to connect to MQTT-server
-    if (MQTTclient.connect(DEVICE_HOSTNAME)) {
+    if (MQTTclient.connect(DEVICE_HOSTNAME, mqttUser, mqttPassword)) {
         loggerNl((char *) FPSTR(mqttOk), LOGLEVEL_NOTICE);
 
         // Deepsleep-subscription
@@ -1465,7 +1485,7 @@ void rfidScanner(void *parameter) {
     for (;;) {
         esp_task_wdt_reset();
         vTaskDelay(10);
-        if ((millis() - lastRfidCheckTimestamp) >= 300) {
+        if ((millis() - lastRfidCheckTimestamp) >= RFID_SCAN_INTERVALL) {
             lastRfidCheckTimestamp = millis();
             // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
 
@@ -2561,6 +2581,14 @@ wl_status_t wifiManager(void) {
             #ifdef FTP_ENABLE
                 ftpSrv.begin(ftpUser, ftpPassword);
             #endif
+
+            // enable remote debugging to telnet if enabled
+            #ifdef REMOTE_DEBUG_ENABLE
+                #define DEBUG_DEVICE_HOSTNAME "Tonuino"
+                loggerNl("Start remote debuging", LOGLEVEL_NOTICE);
+                Debug.begin(DEBUG_DEVICE_HOSTNAME);
+                Debug.setSerialEnabled(true);
+            #endif
         } else { // Starts AP if WiFi-connect wasn't successful
             accessPointStart((char *) FPSTR(accessPointNetworkSSID), apIP, apNetmask);
         }
@@ -2594,6 +2622,10 @@ String templateProcessor(const String& templ) {
         } else {
             return String();
         }
+    } else if (templ == "MQTT_USER") {
+        return prefsSettings.getString("mqttUser", "-1");
+    } else if (templ == "MQTT_PWD") {
+        return prefsSettings.getString("mqttPassword", "-1");
     } else if (templ == "IPv4") {
         myIP = WiFi.localIP();
         snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%d.%d.%d.%d", myIP[0], myIP[1], myIP[2], myIP[3]);
@@ -2658,8 +2690,14 @@ bool processJsonRequest(char *_serialJson) {
     } else if (doc.containsKey("mqtt")) {
         uint8_t _mqttEnable = doc["mqtt"]["mqttEnable"].as<uint8_t>();
         const char *_mqttServer = object["mqtt"]["mqttServer"];
+        const char *_mqttUser = doc["mqtt"]["mqttUser"];
+        const char *_mqttPwd = doc["mqtt"]["mqttPwd"];
+
         prefsSettings.putUChar("enableMQTT", _mqttEnable);
         prefsSettings.putString("mqttServer", (String) _mqttServer);
+        prefsSettings.putString("mqttUser", (String) _mqttUser);
+        prefsSettings.putString("mqttPassword", (String) _mqttPwd);
+
 
         if ((prefsSettings.getUChar("enableMQTT", 99) != _mqttEnable) ||
             (!String(_mqttServer).equals(prefsSettings.getString("mqttServer", "-1")))) {
@@ -3093,6 +3131,28 @@ void setup() {
         loggerNl(logBuf, LOGLEVEL_INFO);
     }
 
+    // Get MQTT-user from NVS
+    String nvsMqttUser = prefsSettings.getString("mqttUser", "-1");
+    if (!nvsMqttUser.compareTo("-1")) {
+        prefsSettings.putString("mqttUser", (String) mqttUser);
+        loggerNl((char *) FPSTR(wroteMqttUserToNvs), LOGLEVEL_ERROR);
+    } else {
+        strncpy(mqttUser, nvsMqttUser.c_str(), sizeof(mqttUser)/sizeof(mqttUser[0]));
+        snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s: %s", (char *) FPSTR(loadedMqttUserFromNvs), nvsMqttUser.c_str());
+        loggerNl(logBuf, LOGLEVEL_INFO);
+    }
+
+    // Get MQTT-password from NVS
+    String nvsMqttPassword = prefsSettings.getString("mqttPassword", "-1");
+    if (!nvsMqttPassword.compareTo("-1")) {
+        prefsSettings.putString("mqttPassword", (String) mqttPassword);
+        loggerNl((char *) FPSTR(wroteMqttPwdToNvs), LOGLEVEL_ERROR);
+    } else {
+        strncpy(mqttPassword, nvsMqttPassword.c_str(), sizeof(mqttPassword)/sizeof(mqttPassword[0]));
+        snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s: %s", (char *) FPSTR(loadedMqttPwdFromNvs), nvsMqttPassword.c_str());
+        loggerNl(logBuf, LOGLEVEL_INFO);
+    }
+
 
     // Create 1000Hz-HW-Timer (currently only used for buttons)
     timerSemaphore = xSemaphoreCreateBinary();
@@ -3209,6 +3269,9 @@ void loop() {
         if (ftpSrv.isConnected()) {
             lastTimeActiveTimestamp = millis();     // Re-adjust timer while client is connected to avoid ESP falling asleep
         }
+    #endif
+    #ifdef REMOTE_DEBUG_ENABLE
+        Debug.handle();
     #endif
 }
 
