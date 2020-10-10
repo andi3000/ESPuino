@@ -59,7 +59,7 @@ char logBuf[160];                                   // Buffer for all log-messag
 #define SPISD_MISO                      16          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
 #define SPISD_SCK                       14
 
-// GPIOs (RFID-readercurrentRfidTagId)
+// GPIOs (RFID-reader)
 #define RST_PIN                         22
 #define RFID_CS                         21
 #define RFID_MOSI                       23
@@ -89,8 +89,8 @@ char logBuf[160];                                   // Buffer for all log-messag
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    24          // number of LEDs
-    #define CHIPSET                     WS2812B     // type of Neopixel
+    #define NUM_LEDS                    12          // number of LEDs
+    #define CHIPSET                     WS2812      // type of Neopixel
     #define COLOR_ORDER                 GRB
 #endif
 
@@ -168,13 +168,10 @@ uint8_t ledBrightness = initialLedBrightness;
 uint8_t nightLedBrightness = 2;                         // Brightness of Neopixel in nightmode
 
 // MQTT
-bool enableMqtt = true;
-#ifdef MQTT_ENABLE
-    uint8_t mqttFailCount = 3;                              // Number of times mqtt-reconnect is allowed to fail. If >= mqttFailCount to further reconnects take place
-    uint8_t const stillOnlineInterval = 60;                 // Interval 'I'm still alive' is sent via MQTT (in seconds)
-#endif
+bool enableMqtt = false;
+
 // RFID
-#define RFID_SCAN_INTERVALL 300; //in ms
+uint8_t const rfidScanInterval = 300;                   // in ms
 uint8_t const cardIdSize = 4;                           // RFID
 // Volume
 uint8_t maxVolume = 21;                                 // Maximum volume that can be adjusted
@@ -187,6 +184,10 @@ uint8_t sleepTimer = 30;                                // Sleep timer in minute
 char ftpUser[10] = "esp32";                             // FTP-user
 char ftpPassword[15] = "esp32";                         // FTP-password
 
+#ifdef MQTT_ENABLE
+    uint8_t mqttFailCount = 3;                              // Number of times mqtt-reconnect is allowed to fail. If >= mqttFailCount to further reconnects take place
+    uint8_t const stillOnlineInterval = 60;                 // Interval 'I'm still alive' is sent via MQTT (in seconds)
+#endif
 
 // Button-configuration (change according your needs)
 uint8_t buttonDebounceInterval = 50;                    // Interval in ms to software-debounce buttons
@@ -591,13 +592,25 @@ void postHeartbeatViaMqtt(void) {
 */
 bool reconnect() {
   uint8_t maxRetries = 10;
+  uint8_t connect = false;
 
   while (!MQTTclient.connected() && mqttFailCount < maxRetries) {
     snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s %s", (char *) FPSTR(tryConnectMqttS), mqtt_server);
     loggerNl(logBuf, LOGLEVEL_NOTICE);
 
-    // Try to connect to MQTT-server
-    if (MQTTclient.connect(DEVICE_HOSTNAME, mqttUser, mqttPassword)) {
+    // Try to connect to MQTT-server. If username AND password are set, they'll be used
+    if (strlen(mqttUser) < 1 || strlen(mqttPassword) < 1) {
+        loggerNl((char *) FPSTR(mqttWithoutPwd), LOGLEVEL_NOTICE);
+        if (MQTTclient.connect(DEVICE_HOSTNAME)) {
+            connect = true;
+        }
+    } else {
+        loggerNl((char *) FPSTR(mqttWithPwd), LOGLEVEL_NOTICE);
+        if (MQTTclient.connect(DEVICE_HOSTNAME, mqttUser, mqttPassword)) {
+            connect = true;
+        }
+    }
+    if (connect) {
         loggerNl((char *) FPSTR(mqttOk), LOGLEVEL_NOTICE);
 
         // Deepsleep-subscription
@@ -1485,7 +1498,7 @@ void rfidScanner(void *parameter) {
     for (;;) {
         esp_task_wdt_reset();
         vTaskDelay(10);
-        if ((millis() - lastRfidCheckTimestamp) >= RFID_SCAN_INTERVALL) {
+        if ((millis() - lastRfidCheckTimestamp) >= rfidScanInterval) {
             lastRfidCheckTimestamp = millis();
             // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
 
