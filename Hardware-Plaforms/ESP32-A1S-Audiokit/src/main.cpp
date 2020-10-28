@@ -4,7 +4,6 @@
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 #define LANGUAGE 1                  // 1 = deutsch; 2 = english
-#define REMOTE_DEBUG_ENABLE
 
 #include <ESP32Encoder.h>
 #include "Arduino.h"
@@ -13,11 +12,12 @@
     #include "ESP32FtpServer.h"
 #endif
 #include "Audio.h"
+#include "AC101.h"
 #include "SPI.h"
 #include "SD.h"
 #include "FS.h"
 #include "esp_task_wdt.h"
-#include <MFRC522.h>
+#include <MFRC522.h>                // https://github.com/madias123/STM32duino-RFID-Mp3-Player/tree/master/3d%20party%20libraries%20(modified)/MFRC522
 #include <Preferences.h>
 #ifdef MQTT_ENABLE
     #include <PubSubClient.h>
@@ -42,9 +42,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <nvsDump.h>
-#ifdef REMOTE_DEBUG_ENABLE
-    #include <RemoteDebug.h>
-#endif
+
 
 
 // Info-docs:
@@ -64,43 +62,54 @@ const uint8_t serialDebug = LOGLEVEL_INFO;          // Current loglevel for seri
 char logBuf[160];                                   // Buffer for all log-messages
 
 // GPIOs (uSD card-reader)
-#define SPISD_CS                        15
-#define SPISD_MOSI                      13
-#define SPISD_MISO                      16          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
-#define SPISD_SCK                       14
+#define SD_CS                           13          // internal
+#define SPI_MOSI                        15          // JT_MTDO
+#define SPI_MISO                         2          // Solder to pin7 of SD
+#define SPI_SCK                         14          // JT_MTMS
 
-// GPIOs (RFID-reader)
-#define RST_PIN                         22
-#define RFID_CS                         21
-#define RFID_MOSI                       23
-#define RFID_MISO                       19
-#define RFID_SCK                        18
+// GPIOs (RFID-readercurrentRfidTagId)
+#define MFRC522_RST_PIN                 35          // 14-pin-header
+#define MFRC522_CS_PIN                  12          // JT_MTDI
+extern SPIClass SPI_MFRC;
+MFRC522 mfrc522(MFRC522_CS_PIN, MFRC522_RST_PIN);
 
-// GPIOs (DAC)
-#define I2S_DOUT                        25
-#define I2S_BCLK                        27
-#define I2S_LRC                         26
+// DAC (internal)
+#define I2S_DSIN                        25          // internal
+#define I2S_BCLK                        27          // internal
+#define I2S_LRC                         26          // internal
+#define I2S_MCLK                         0          // internal
+#define I2S_DOUT                        35          // internal
+
+// I2C GPIOs
+#define IIC_CLK                         32          // internal
+#define IIC_DATA                        33          // internal
 
 // GPIO used to trigger transistor-circuit / RFID-reader
-#define POWER                           17
+#define POWER                           19
 
 // GPIOs (Rotary encoder)
-#define DREHENCODER_CLK                 34
-#define DREHENCODER_DT                  35
-#define DREHENCODER_BUTTON              32
+#define DREHENCODER_CLK                 5
+#define DREHENCODER_DT                  18
+#define DREHENCODER_BUTTON              4           // Solder to pin8 of SD
 
-// GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                5
+// GPIOs (Control-buttons)                          // Currently deactivated; please read README.md
+/*#define PAUSEPLAY_BUTTON                5
 #define NEXT_BUTTON                     4
-#define PREVIOUS_BUTTON                 33
+#define PREVIOUS_BUTTON                 33*/
+
+// Amp enable
+#define GPIO_PA_EN                      21          // internal
+
+// Headphone?
+#define HEADPHONE_PLUGGED_IN            39          // internal
 
 // GPIOs (LEDs)
-#define LED_PIN                         12
+#define LED_PIN                         23
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    12          // number of LEDs
-    #define CHIPSET                     WS2812      // type of Neopixel
+    #define NUM_LEDS                    24          // number of LEDs
+    #define CHIPSET                     WS2812B     // type of Neopixel
     #define COLOR_ORDER                 GRB
 #endif
 
@@ -178,8 +187,11 @@ uint8_t ledBrightness = initialLedBrightness;
 uint8_t nightLedBrightness = 2;                         // Brightness of Neopixel in nightmode
 
 // MQTT
-bool enableMqtt = false;
-
+bool enableMqtt = true;
+#ifdef MQTT_ENABLE
+    uint8_t mqttFailCount = 3;                              // Number of times mqtt-reconnect is allowed to fail. If >= mqttFailCount to further reconnects take place
+    uint8_t const stillOnlineInterval = 60;                 // Interval 'I'm still alive' is sent via MQTT (in seconds)
+#endif
 // RFID
 #define RFID_SCAN_INTERVAL 300                         //in ms
 uint8_t const cardIdSize = 4;                           // RFID
@@ -194,10 +206,6 @@ uint8_t sleepTimer = 30;                                // Sleep timer in minute
 char ftpUser[10] = "esp32";                             // FTP-user
 char ftpPassword[15] = "esp32";                         // FTP-password
 
-#ifdef MQTT_ENABLE
-    uint8_t mqttFailCount = 3;                              // Number of times mqtt-reconnect is allowed to fail. If >= mqttFailCount to further reconnects take place
-    uint8_t const stillOnlineInterval = 60;                 // Interval 'I'm still alive' is sent via MQTT (in seconds)
-#endif
 
 // Button-configuration (change according your needs)
 uint8_t buttonDebounceInterval = 50;                    // Interval in ms to software-debounce buttons
@@ -250,24 +258,24 @@ char mqttUser[16] = "mqtt-user";                        // MQTT-user
 char mqttPassword[16] = "mqtt-password";                // MQTT-password
 #ifdef MQTT_ENABLE
     #define DEVICE_HOSTNAME "ESP32-Tonuino"                 // Name that that is used for MQTT
-    static const char topicSleepCmnd[] PROGMEM = "Tonuino/Cmd/Sleep";
-    static const char topicSleepState[] PROGMEM = "Tonuino/State/Sleep";
-    static const char topicTrackCmnd[] PROGMEM = "Tonuino/Cmd/Track";
-    static const char topicTrackState[] PROGMEM = "Tonuino/State/Track";
-    static const char topicTrackControlCmnd[] PROGMEM = "Tonuino/Cmd/TrackControl";
-    static const char topicLoudnessCmnd[] PROGMEM = "Tonuino/Cmd/Volume";
-    static const char topicLoudnessState[] PROGMEM = "Tonuino/State/Volume";
-    static const char topicSleepTimerCmnd[] PROGMEM = "Tonuino/Cmd/SleepTimer";
-    static const char topicSleepTimerState[] PROGMEM = "Tonuino/State/SleepTimer";
-    static const char topicState[] PROGMEM = "Tonuino/State/State";
-    static const char topicCurrentIPv4IP[] PROGMEM = "Tonuino/State/IPv4";
-    static const char topicLockControlsCmnd[] PROGMEM ="Tonuino/Cmd/LockControls";
-    static const char topicLockControlsState[] PROGMEM ="Tonuino/State/LockControls";
-    static const char topicPlaymodeState[] PROGMEM = "Tonuino/State/Playmode";
-    static const char topicRepeatModeCmnd[] PROGMEM = "Tonuino/Cmd/RepeatMode";
-    static const char topicRepeatModeState[] PROGMEM = "Tonuino/State/RepeatMode";
-    static const char topicLedBrightnessCmnd[] PROGMEM = "Tonuino/Cmd/LedBrightness";
-    static const char topicLedBrightnessState[] PROGMEM = "Tonuino/State/LedBrightness";
+    static const char topicSleepCmnd[] PROGMEM = "Cmnd/Tonuino/Sleep";
+    static const char topicSleepState[] PROGMEM = "State/Tonuino/Sleep";
+    static const char topicTrackCmnd[] PROGMEM = "Cmnd/Tonuino/Track";
+    static const char topicTrackState[] PROGMEM = "State/Tonuino/Track";
+    static const char topicTrackControlCmnd[] PROGMEM = "Cmnd/Tonuino/TrackControl";
+    static const char topicLoudnessCmnd[] PROGMEM = "Cmnd/Tonuino/Loudness";
+    static const char topicLoudnessState[] PROGMEM = "State/Tonuino/Loudness";
+    static const char topicSleepTimerCmnd[] PROGMEM = "Cmnd/Tonuino/SleepTimer";
+    static const char topicSleepTimerState[] PROGMEM = "State/Tonuino/SleepTimer";
+    static const char topicState[] PROGMEM = "State/Tonuino/State";
+    static const char topicCurrentIPv4IP[] PROGMEM = "State/Tonuino/IPv4";
+    static const char topicLockControlsCmnd[] PROGMEM ="Cmnd/Tonuino/LockControls";
+    static const char topicLockControlsState[] PROGMEM ="State/Tonuino/LockControls";
+    static const char topicPlaymodeState[] PROGMEM = "State/Tonuino/Playmode";
+    static const char topicRepeatModeCmnd[] PROGMEM = "Cmnd/Tonuino/RepeatMode";
+    static const char topicRepeatModeState[] PROGMEM = "State/Tonuino/RepeatMode";
+    static const char topicLedBrightnessCmnd[] PROGMEM = "Cmnd/Tonuino/LedBrightness";
+    static const char topicLedBrightnessState[] PROGMEM = "State/Tonuino/LedBrightness";
 #endif
 
 char stringDelimiter[] = "#";                               // Character used to encapsulate data in linear NVS-strings (don't change)
@@ -296,11 +304,6 @@ TaskHandle_t rfid;
 // FTP
 #ifdef FTP_ENABLE
     FtpServer ftpSrv;
-#endif
-
-// Remote Debugger
-#ifdef REMOTE_DEBUG_ENABLE
-    RemoteDebug Debug;
 #endif
 
 // Info: SSID / password are stored in NVS
@@ -391,22 +394,14 @@ wl_status_t wifiManager(void);
 /* Wrapper-Funktion for Serial-logging (with newline) */
 void loggerNl(const char *str, const uint8_t logLevel) {
   if (serialDebug >= logLevel) {
-      #ifdef REMOTE_DEBUG_ENABLE
-          Debug.println(str);
-      #else
-          Serial.println(str);
-      #endif
+    Serial.println(str);
   }
 }
 
 /* Wrapper-Funktion for Serial-Logging (without newline) */
 void logger(const char *str, const uint8_t logLevel) {
   if (serialDebug >= logLevel) {
-      #ifdef REMOTE_DEBUG_ENABLE
-          Debug.printf(str);
-      #else
-          Serial.println(str);
-      #endif
+    Serial.print(str);
   }
 }
 
@@ -470,9 +465,9 @@ void buttonHandler() {
             return;
         }
         unsigned long currentTimestamp = millis();
-        buttons[0].currentState = digitalRead(NEXT_BUTTON);
-        buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
-        buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
+        //buttons[0].currentState = digitalRead(NEXT_BUTTON);
+        //buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
+        //buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
         buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
 
         // Iterate over all buttons in struct-array
@@ -1152,14 +1147,41 @@ size_t nvsRfidWriteWrapper (const char *_rfidCardId, const char *_track, const u
 // Function to play music as task
 void playAudio(void *parameter) {
     static Audio audio;
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+    static AC101 ac;
+    static bool currentHeadphoneState = digitalRead(HEADPHONE_PLUGGED_IN);
+    static bool lastHeadphoneState = currentHeadphoneState;
+    static uint32_t lastHeadphoneStateTimestamp = 0;
+
+    while (!ac.begin(IIC_DATA, IIC_CLK)) {
+        Serial.printf("Failed!\n");
+        delay(1000);
+    }
+
+    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DSIN);
     audio.setVolume(initVolume);
+
+    pinMode(GPIO_PA_EN, OUTPUT);
+    digitalWrite(GPIO_PA_EN, HIGH);
 
     uint8_t currentVolume;
     static BaseType_t trackQStatus;
     static uint8_t trackCommand = 0;
 
     for (;;) {
+        // GPIO is 0 if headphone is plugged in. So turn of speaker if so and vice versa.
+        currentHeadphoneState = digitalRead(HEADPHONE_PLUGGED_IN);
+        if (((lastHeadphoneState != currentHeadphoneState) && (millis() - lastHeadphoneStateTimestamp >= 1000)) || !lastHeadphoneStateTimestamp) {
+            if (!currentHeadphoneState) {
+                ac.SetVolumeHeadphone(100);
+                ac.SetVolumeSpeaker(0);
+            } else {
+                ac.SetVolumeHeadphone(0);
+                ac.SetVolumeSpeaker(50);
+            }
+            lastHeadphoneState = currentHeadphoneState;
+            lastHeadphoneStateTimestamp = millis();
+        }
+
         if (xQueueReceive(volumeQueue, &currentVolume, 0) == pdPASS ) {
             snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s: %d", (char *) FPSTR(newLoudnessReceivedQueue), currentVolume);
             loggerNl(logBuf, LOGLEVEL_INFO);
@@ -1481,6 +1503,7 @@ void playAudio(void *parameter) {
         #endif
 
         audio.loop();
+
         if (playProperties.playlistFinished || playProperties.pausePlay) {
             vTaskDelay(portTICK_PERIOD_MS*10);                   // Waste some time if playlist is not active
         } else {
@@ -1495,8 +1518,11 @@ void playAudio(void *parameter) {
 
 // Instructs RFID-scanner to scan for new RFID-tags
 void rfidScanner(void *parameter) {
-    static MFRC522 mfrc522(RFID_CS, RST_PIN);
-    SPI.begin();
+    //static MFRC522 mfrc522(MFRC522_CS_PIN, MFRC522_RST_PIN);
+    //static MFRC522 mfrc522(RFID_CS, RST_PIN);
+    //SPI.begin();
+    pinMode(MFRC522_CS_PIN, OUTPUT);
+    digitalWrite(MFRC522_CS_PIN, HIGH);
     mfrc522.PCD_Init();
     mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader detail
     delay(4);
@@ -1886,6 +1912,7 @@ void deepSleepManager(void) {
         /*SPI.end();
         spiSD.end();*/
         digitalWrite(POWER, LOW);
+        digitalWrite(GPIO_PA_EN, LOW);
         delay(200);
         esp_deep_sleep_start();
     }
@@ -2637,14 +2664,6 @@ wl_status_t wifiManager(void) {
             #ifdef FTP_ENABLE
                 ftpSrv.begin(ftpUser, ftpPassword);
             #endif
-
-            // enable remote debugging to telnet if enabled
-            #ifdef REMOTE_DEBUG_ENABLE
-                #define DEBUG_DEVICE_HOSTNAME "Tonuino"
-                loggerNl("Start remote debuging", LOGLEVEL_NOTICE);
-                Debug.begin(DEBUG_DEVICE_HOSTNAME);
-                Debug.setSerialEnabled(true);
-            #endif
         } else { // Starts AP if WiFi-connect wasn't successful
             accessPointStart((char *) FPSTR(accessPointNetworkSSID), apIP, apNetmask);
         }
@@ -2754,6 +2773,8 @@ bool processJsonRequest(char *_serialJson) {
     } else if (doc.containsKey("mqtt")) {
         uint8_t _mqttEnable = doc["mqtt"]["mqttEnable"].as<uint8_t>();
         const char *_mqttServer = object["mqtt"]["mqttServer"];
+        prefsSettings.putUChar("enableMQTT", _mqttEnable);
+        prefsSettings.putString("mqttServer", (String) _mqttServer);
         const char *_mqttUser = doc["mqtt"]["mqttUser"];
         const char *_mqttPwd = doc["mqtt"]["mqttPwd"];
 
@@ -3028,8 +3049,13 @@ void setup() {
     srand(esp_random());
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
+    pinMode(HEADPHONE_PLUGGED_IN, INPUT);
+
     prefsRfid.begin((char *) FPSTR(prefsRfidNamespace));
     prefsSettings.begin((char *) FPSTR(prefsSettingsNamespace));
+
+    SPI_MFRC.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    SPI_MFRC.setFrequency(1000000);
 
     playProperties.playMode = NO_PLAYLIST;
     playProperties.playlist = NULL;
@@ -3068,11 +3094,11 @@ void setup() {
 #endif
 
     // Init uSD-SPI
-    pinMode(SPISD_CS, OUTPUT);
-    digitalWrite(SPISD_CS, HIGH);
-    spiSD.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
-    spiSD.setFrequency(1000000);
-    while (!SD.begin(SPISD_CS, spiSD)) {
+    pinMode(SD_CS, OUTPUT);
+    digitalWrite(SD_CS, HIGH);
+    /*SPI_MFRC.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    SPI_MFRC.setFrequency(1000000);*/
+    while (!SD.begin(SD_CS, SPI_MFRC)) {
         loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
         delay(500);
     }
@@ -3264,9 +3290,9 @@ void setup() {
 
     // Activate internal pullups for all buttons
     pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
-    pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
+    /*pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
     pinMode(NEXT_BUTTON, INPUT_PULLUP);
-    pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);
+    pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);*/
 
     // Init rotary encoder
     encoder.attachHalfQuad(DREHENCODER_CLK, DREHENCODER_DT);
@@ -3346,9 +3372,6 @@ void loop() {
         if (ftpSrv.isConnected()) {
             lastTimeActiveTimestamp = millis();     // Re-adjust timer while client is connected to avoid ESP falling asleep
         }
-    #endif
-    #ifdef REMOTE_DEBUG_ENABLE
-        Debug.handle();
     #endif
 }
 
