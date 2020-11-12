@@ -2,7 +2,7 @@
 #define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
 #define FTP_ENABLE                  // Enables FTP-server
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
-#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+//#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 #define LANGUAGE 1                  // 1 = deutsch; 2 = english
 #define REMOTE_DEBUG_ENABLE
 //#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two
@@ -72,19 +72,22 @@ uint8_t serialLoglength = 200;
 char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all log-messages
 
 // GPIOs (uSD card-reader)
-#define SPISD_CS                        15
+#define SPISD_CS                        4
 #ifndef SINGLE_SPI_ENABLE
-    #define SPISD_MOSI                  13
-    #define SPISD_MISO                  16          // 12 doesn't work with some devel-boards
-    #define SPISD_SCK                   14
+    #define SPISD_MOSI                  23
+    #define SPISD_MISO                  19          // 12 doesn't work with some devel-boards
+    #define SPISD_SCK                   18
 #endif
 
 // GPIOs (RFID-reader)
-#define RST_PIN                         22
-#define RFID_CS                         21
-#define RFID_MOSI                       23
-#define RFID_MISO                       19
-#define RFID_SCK                        18
+extern SPIClass SPI_MFRC;                           // Verweis auf SPI_MFRC in Madias Library MFRC522
+#define RFID_RST                        15
+#define RFID_CS                         2
+#define RFID_MOSI                       13
+#define RFID_MISO                       39
+#define RFID_SCK                        14
+
+MFRC522 mfrc522(RFID_CS, RFID_RST);
 
 // GPIOs (DAC)
 #define I2S_DOUT                        25
@@ -96,20 +99,25 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #endif
 
 // GPIO used to trigger transistor-circuit / RFID-reader
-#define POWER                           17
+#define POWER                           21
+
+// Power management
+#define BAT_SENSE_PIN                   35
 
 // GPIOs (Rotary encoder)
-#define DREHENCODER_CLK                 34
-#define DREHENCODER_DT                  35
-#define DREHENCODER_BUTTON              32
+#define DREHENCODER_CLK                 36
+#define DREHENCODER_DT                  34
+#define DREHENCODER_BUTTON              16
 
 // GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                5
-#define NEXT_BUTTON                     4
+#define PAUSEPLAY_BUTTON                12
+#define NEXT_BUTTON                     32
 #define PREVIOUS_BUTTON                 33
 
+// #define HEADSET_JACK                 22
+
 // GPIOs (LEDs)
-#define LED_PIN                         12
+#define LED_PIN                         5
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
@@ -309,7 +317,7 @@ static const char restartWebsite[] PROGMEM = "<p>Der Tonuino wird neu gestartet.
 
 
 // Audio/mp3
-SPIClass spiSD(HSPI);
+//SPIClass spiSD(HSPI);
 TaskHandle_t mp3Play;
 TaskHandle_t rfid;
 #ifdef NEOPIXEL_ENABLE
@@ -1520,9 +1528,9 @@ void playAudio(void *parameter) {
 
 // Instructs RFID-scanner to scan for new RFID-tags
 void rfidScanner(void *parameter) {
-    static MFRC522 mfrc522(RFID_CS, RST_PIN);
+    static MFRC522 mfrc522(RFID_CS, RFID_RST);
     #ifndef SINGLE_SPI_ENABLE
-        SPI.begin();
+        SPI.begin(4);
     #endif
     mfrc522.PCD_Init();
     mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader detail
@@ -2794,8 +2802,6 @@ bool processJsonRequest(char *_serialJson) {
         const char *_mqttPwd = doc["mqtt"]["mqttPwd"];
 
         prefsSettings.putUChar("enableMQTT", _mqttEnable);
-        prefsSettings.putUChar("enableMQTT", _mqttEnable);
-        prefsSettings.putString("mqttServer", (String) _mqttServer);
         prefsSettings.putString("mqttServer", (String) _mqttServer);
         prefsSettings.putString("mqttUser", (String) _mqttUser);
         prefsSettings.putString("mqttPassword", (String) _mqttPwd);
@@ -3108,19 +3114,19 @@ void setup() {
     digitalWrite(SPISD_CS, HIGH);
 
     #ifndef SINGLE_SPI_ENABLE
-        spiSD.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
-        spiSD.setFrequency(1000000);
+        SPI.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
+        SPI.setFrequency(1000000);
     #else
         //SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI);
         SPI.begin();
         SPI.setFrequency(1000000);
     #endif
-
-    #ifndef SINGLE_SPI_ENABLE
-        while (!SD.begin(SPISD_CS, spiSD)) {
-    #else
+    SPI_MFRC.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_CS);
+    // #ifndef SINGLE_SPI_ENABLE
+    //    while (!SD.begin(SPISD_CS, spiSD)) {
+    //#else
         while (!SD.begin(SPISD_CS)) {
-    #endif
+    //#endif
             loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
             delay(500);
             #ifdef SD_NOT_MANDATORY_ENABLE
