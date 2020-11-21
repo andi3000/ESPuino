@@ -6,8 +6,12 @@
 #define LANGUAGE 1                  // 1 = deutsch; 2 = english
 #define REMOTE_DEBUG_ENABLE
 //#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two
+#define HEADPHONE_ADJUST_ENABLE     // Used to adjust (lower) volume for optional headphone-pcb (refer maxVolumeSpeaker / maxVolumeHeadphone)
+//#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two (not yet working!)
+#define SHUTDOWN_IF_SD_BOOT_FAILS   // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
 
-//#define SD_NOT_MANDATORY_ENABLE     // Only for debugging-purposes: Tonuino will also start without mounted SD-card anyway (will only try once to mount it )
+//#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
+//#define SD_NOT_MANDATORY_ENABLE     // Only for debugging-purposes: Tonuino will also start without mounted SD-card anyway (will only try once to mount it). Will overwrite SHUTDOWN_IF_SD_BOOT_FAILS!
 //#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
 
 #include <ESP32Encoder.h>
@@ -80,7 +84,7 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #endif
 
 // GPIOs (RFID-reader)
-#define RST_PIN                         22
+#define RST_PIN                         99          // Not necessary but has to be set anyway; so let's use a dummy-number
 #define RFID_CS                         21
 #define RFID_MOSI                       23
 #define RFID_MISO                       19
@@ -91,6 +95,16 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #define I2S_BCLK                        27
 #define I2S_LRC                         26
 
+// GPIO to detect if headphone was plugged in (pulled to GND)
+#ifdef HEADPHONE_ADJUST_ENABLE
+    #define HP_DETECT                   22              // Detects if there's a plug in the headphone jack or not
+    uint16_t headphoneLastDetectionDebounce = 1000;     // Debounce-interval in ms when plugging in headphone
+
+    // Internal values
+    bool headphoneLastDetectionState;
+    uint32_t headphoneLastDetectionTimestamp = 0;
+#endif
+
 #ifdef BLUETOOTH_ENABLE
     BluetoothA2DPSink a2dp_sink;
 #endif
@@ -99,17 +113,33 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #define POWER                           17
 
 // GPIOs (Rotary encoder)
-#define DREHENCODER_CLK                 34
-#define DREHENCODER_DT                  35
-#define DREHENCODER_BUTTON              32
+#define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+#define DREHENCODER_DT                  35          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+#define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
 
 // GPIOs (Control-buttons)
 #define PAUSEPLAY_BUTTON                5
 #define NEXT_BUTTON                     4
-#define PREVIOUS_BUTTON                 33
+#define PREVIOUS_BUTTON                 2           // Please note: as of 19.11.2020 changed from 33 to 2
 
 // GPIOs (LEDs)
-#define LED_PIN                         12
+#define LED_PIN                         12          // Pin where Neopixel is connected to
+
+#ifdef MEASURE_BATTERY_VOLTAGE
+    #define VOLTAGE_READ_PIN            33          // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+    uint16_t r1 = 391;                              // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
+    uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
+    float warningLowVoltage = 3.22;                  // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
+    uint8_t voltageCheckInterval = 5;               // How of battery-voltage is measured (in minutes)
+
+    // Internal values
+    float refVoltage = 3.3;                         // Operation-voltage of ESP32; don't change!
+    uint16_t maxAnalogValue = 4095;                 // Highest value given by analogRead(); don't change!
+    uint32_t lastVoltageCheckTimestamp = 0;
+    #ifdef NEOPIXEL_ENABLE
+        bool showVoltageWarning = false;
+    #endif
+#endif
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
@@ -192,6 +222,10 @@ uint8_t initialLedBrightness = 16;                      // Initial brightness of
 uint8_t ledBrightness = initialLedBrightness;
 uint8_t nightLedBrightness = 2;                         // Brightness of Neopixel in nightmode
 
+// Automatic restart
+#ifdef SHUTDOWN_IF_SD_BOOT_FAILS
+    uint32_t deepsleepTimeAfterBootFails = 20;          // Automatic restart takes place if boot was not successful after this period (in seconds)
+#endif
 // MQTT
 bool enableMqtt = true;
 #ifdef MQTT_ENABLE
@@ -203,9 +237,13 @@ bool enableMqtt = true;
 #define RFID_SCAN_INTERVAL 300                          // in ms
 uint8_t const cardIdSize = 4;                           // RFID
 // Volume
-uint8_t maxVolume = 21;                                 // Maximum volume that can be adjusted (default; can be changed later via GUI)
+uint8_t maxVolume = 21;                                 // Current maximum volume that can be adjusted
+uint8_t maxVolumeSpeaker = 21;                          // Maximum volume that can be adjusted in speaker-mode (default; can be changed later via GUI)
 uint8_t minVolume = 0;                                  // Lowest volume that can be adjusted
 uint8_t initVolume = 3;                                 // 0...21 (If not found in NVS, this one will be taken) (default; can be changed later via GUI)
+#ifdef HEADPHONE_ADJUST_ENABLE
+    uint8_t maxVolumeHeadphone = 11;                    // Maximum volume that can be adjusted in headphone-mode (default; can be changed later via GUI)
+#endif
 // Sleep
 uint8_t maxInactivityTime = 10;                         // Time in minutes, after uC is put to deep sleep because of inactivity
 uint8_t sleepTimer = 30;                                // Sleep timer in minutes that can be optionally used (and modified later via MQTT or RFID)
@@ -291,6 +329,7 @@ char *mqttPassword = strndup((char*) "mqtt-password", mqttPasswordLength);  // M
     static const char topicRepeatModeState[] PROGMEM = "Tonuino/State/RepeatMode";
     static const char topicLedBrightnessCmnd[] PROGMEM = "Tonuino/Cmd/LedBrightness";
     static const char topicLedBrightnessState[] PROGMEM = "Tonuino/State/LedBrightness";
+    static const char topicBatteryVoltage[] PROGMEM = "Tonuino/State/Voltage";
 #endif
 
 char stringDelimiter[] = "#";                               // Character used to encapsulate data in linear NVS-strings (don't change)
@@ -370,6 +409,7 @@ static int arrSortHelper(const void* a, const void* b);
 #ifdef MQTT_ENABLE
     void callback(const char *topic, const byte *payload, uint32_t length);
 #endif
+void batteryVoltageTester(void);
 void buttonHandler();
 void deepSleepManager(void);
 void doButtonActions(void);
@@ -379,6 +419,7 @@ bool endsWith (const char *str, const char *suf);
 bool fileValid(const char *_fileItem);
 void freeMultiCharArray(char **arr, const uint32_t cnt);
 uint8_t getRepeatMode(void);
+void headphoneVolumeManager(void);
 bool isNumber(const char *str);
 void loggerNl(const char *str, const uint8_t logLevel);
 void logger(const char *str, const uint8_t logLevel);
@@ -405,6 +446,7 @@ String templateProcessor(const String& templ);
 void trackControlToQueueSender(const uint8_t trackCommand);
 void rfidPreferenceLookupHandler (void);
 void sendWebsocketData(uint32_t client, uint8_t code);
+void setupVolume(void);
 void trackQueueDispatcher(const char *_sdFile, const uint32_t _lastPlayPos, const uint32_t _playMode, const uint16_t _trackLastPlayed);
 void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume);
 void volumeToQueueSender(const int32_t _newVolume);
@@ -484,6 +526,35 @@ int countChars(const char* string, char ch) {
 void IRAM_ATTR onTimer() {
   xSemaphoreGiveFromISR(timerSemaphore, NULL);
 }
+
+
+// Measures voltage of a battery as per interval or after bootup (after allowing a few seconds to settle down)
+#ifdef MEASURE_BATTERY_VOLTAGE
+    void batteryVoltageTester(void) {
+        if ((millis() - lastVoltageCheckTimestamp >= voltageCheckInterval*60000) || (!lastVoltageCheckTimestamp && millis()>=10000)) {
+            float factor = 1 / ((float) r1/(r1+r2));
+            float voltage = ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
+
+            #ifdef NEOPIXEL_ENABLE
+                if (voltage <= warningLowVoltage) {
+                    snprintf(logBuf, serialLoglength, "%s: (%.2f V)", (char *) FPSTR(voltageTooLow), voltage);
+                    loggerNl(logBuf, LOGLEVEL_ERROR);
+                    showVoltageWarning = true;
+                }
+            #endif
+
+            #ifdef MQTT_ENABLE
+                char vstr[6];
+                snprintf(vstr, 6, "%.2f", voltage);
+                publishMqtt((char *) FPSTR(topicBatteryVoltage), vstr, false);
+            #endif
+            snprintf(logBuf, serialLoglength, "%s: %.2f V", (char *) FPSTR(currentVoltageMsg), voltage);
+            loggerNl(logBuf, LOGLEVEL_INFO);
+            //Serial.printf("Spannung: %f\n", voltage);
+            lastVoltageCheckTimestamp = millis();
+        }
+    }
+#endif
 
 
 // If timer-semaphore is set, read buttons (unless controls are locked)
@@ -1691,6 +1762,29 @@ void showLed(void *parameter) {
             vTaskDelay(portTICK_RATE_MS * 400);
         }
 
+        #ifdef MEASURE_BATTERY_VOLTAGE
+            if (showVoltageWarning) {           // Flashes red three times if battery-voltage is low
+                showVoltageWarning = false;
+                notificationShown = true;
+                for (uint8_t i=0; i<3; i++) {
+                    FastLED.clear();
+
+                    for (uint8_t led = 0; led < NUM_LEDS; led++) {
+                        leds[ledAddress(led)] = CRGB::Red;
+                    }
+                    FastLED.show();
+                    vTaskDelay(portTICK_RATE_MS * 200);
+                    FastLED.clear();
+
+                    for (uint8_t led = 0; led < NUM_LEDS; led++) {
+                        leds[ledAddress(led)] = CRGB::Black;
+                    }
+                    FastLED.show();
+                    vTaskDelay(portTICK_RATE_MS * 200);
+                }
+            }
+        #endif
+
         if (hlastVolume != currentVolume) {         // If volume has been changed
             uint8_t numLedsToLight = map(currentVolume, 0, maxVolume, 0, NUM_LEDS);
             hlastVolume = currentVolume;
@@ -1735,7 +1829,11 @@ void showLed(void *parameter) {
                 for (uint8_t i=0; i < numLedsToLight; i++) {
                     leds[ledAddress(i)] = CRGB::Blue;
                     FastLED.show();
-                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #ifdef MEASURE_BATTERY_VOLTAGE
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || !buttons[3].currentState) {
+                    #else
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #endif
                         break;
                     } else {
                         vTaskDelay(portTICK_RATE_MS*30);
@@ -1743,7 +1841,11 @@ void showLed(void *parameter) {
                 }
 
                 for (uint8_t i=0; i<=100; i++) {
-                   if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #ifdef MEASURE_BATTERY_VOLTAGE
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || !buttons[3].currentState) {
+                    #else
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #endif
                         break;
                     } else {
                         vTaskDelay(portTICK_RATE_MS*15);
@@ -1753,7 +1855,11 @@ void showLed(void *parameter) {
                 for (uint8_t i=numLedsToLight; i>0; i--) {
                     leds[ledAddress(i)-1] = CRGB::Black;
                     FastLED.show();
-                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #ifdef MEASURE_BATTERY_VOLTAGE
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || !buttons[3].currentState) {
+                    #else
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
+                    #endif
                         break;
                     } else {
                         vTaskDelay(portTICK_RATE_MS*30);
@@ -1780,7 +1886,11 @@ void showLed(void *parameter) {
                         }
                         FastLED.show();
                         for (uint8_t i=0; i<=50; i++) {
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
+                            #ifdef MEASURE_BATTERY_VOLTAGE
+                                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
+                            #else
+                                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
+                            #endif
                                 break;
                             } else {
                                 vTaskDelay(portTICK_RATE_MS * 10);
@@ -1815,7 +1925,11 @@ void showLed(void *parameter) {
 
             default:                            // If playlist is active (doesn't matter which type)
                 if (!playProperties.playlistFinished) {
-                    if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[3].currentState) {
+                    #ifdef MEASURE_BATTERY_VOLTAGE
+                        if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || showVoltageWarning || !buttons[3].currentState) {
+                    #else
+                        if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[3].currentState) {
+                    #endif
                         lastPlayState = playProperties.pausePlay;
                         lastLockState = lockControls;
                         notificationShown = false;
@@ -2700,8 +2814,10 @@ String templateProcessor(const String& templ) {
         return String(prefsSettings.getUInt("mInactiviyT", 0));
     } else if (templ == "INIT_VOLUME") {
         return String(prefsSettings.getUInt("initVolume", 0));
-    } else if (templ == "MAX_VOLUME") {
-        return String(prefsSettings.getUInt("maxVolume", 0));
+    } else if (templ == "MAX_VOLUME_SPEAKER") {
+        return String(prefsSettings.getUInt("maxVolumeSp", 0));
+    } else if (templ == "MAX_VOLUME_HEADPHONE") {
+        return String(prefsSettings.getUInt("maxVolumeHp", 0));
     } else if (templ == "MQTT_SERVER") {
         return prefsSettings.getString("mqttServer", "-1");
     } else if (templ == "MQTT_ENABLE") {
@@ -2755,20 +2871,23 @@ bool processJsonRequest(char *_serialJson) {
 
     if (doc.containsKey("general")) {
         uint8_t iVol = doc["general"]["iVol"].as<uint8_t>();
-        uint8_t mVol = doc["general"]["mVol"].as<uint8_t>();
+        uint8_t mVolSpeaker = doc["general"]["mVolSpeaker"].as<uint8_t>();
+        uint8_t mVolHeadphone = doc["general"]["mVolHeadphone"].as<uint8_t>();
         uint8_t iBright = doc["general"]["iBright"].as<uint8_t>();
         uint8_t nBright = doc["general"]["nBright"].as<uint8_t>();
         uint8_t iTime = doc["general"]["iTime"].as<uint8_t>();
 
         prefsSettings.putUInt("initVolume", iVol);
-        prefsSettings.putUInt("maxVolume", mVol);
+        prefsSettings.putUInt("maxVolumeSp", mVolSpeaker);
+        prefsSettings.putUInt("maxVolumeHp", mVolHeadphone);
         prefsSettings.putUChar("iLedBrightness", iBright);
         prefsSettings.putUChar("nLedBrightness", nBright);
         prefsSettings.putUInt("mInactiviyT", iTime);
 
         // Check if settings were written successfully
         if (prefsSettings.getUInt("initVolume", 0) != iVol ||
-            prefsSettings.getUInt("maxVolume", 0) != mVol ||
+            prefsSettings.getUInt("maxVolumeSp", 0) != mVolSpeaker ||
+            prefsSettings.getUInt("maxVolumeHp", 0) != mVolHeadphone |
             prefsSettings.getUChar("iLedBrightness", 0) != iBright ||
             prefsSettings.getUChar("nLedBrightness", 0) != nBright ||
             prefsSettings.getUInt("mInactiviyT", 0) != iTime) {
@@ -2937,6 +3056,46 @@ void onWebsocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsE
     }
 }
 
+// Set maxVolume depending on headphone-adjustment is enabled and headphone is/is not connected
+void setupVolume(void) {
+
+    #ifndef HEADPHONE_ADJUST_ENABLE
+        maxVolume = maxVolumeSpeaker;
+        return;
+    #else
+        if (digitalRead(HP_DETECT)) {
+            maxVolume = maxVolumeSpeaker;               // 1 if headphone is not connected
+        } else {
+            maxVolume = maxVolumeHeadphone;             // 0 if headphone is connected (put to GND)
+        }
+        snprintf(logBuf, serialLoglength, "%s: %u", (char *) FPSTR(maxVolumeSet), maxVolume);
+        loggerNl(logBuf, LOGLEVEL_INFO);
+        return;
+    #endif
+}
+
+
+#ifdef HEADPHONE_ADJUST_ENABLE
+    void headphoneVolumeManager(void) {
+        bool currentHeadPhoneDetectionState = digitalRead(HP_DETECT);
+
+        if (headphoneLastDetectionState != currentHeadPhoneDetectionState && (millis() - headphoneLastDetectionTimestamp >= headphoneLastDetectionDebounce)) {
+            if (currentHeadPhoneDetectionState) {
+                maxVolume = maxVolumeSpeaker;
+            } else {
+                maxVolume = maxVolumeHeadphone;
+                if (currentVolume > maxVolume) {
+                    volumeToQueueSender(maxVolume);         // Lower volume for headphone if headphone's maxvolume is exceeded by volume set in speaker-mode
+                }
+            }
+            headphoneLastDetectionState = currentHeadPhoneDetectionState;
+            headphoneLastDetectionTimestamp = millis();
+            snprintf(logBuf, serialLoglength, "%s: %u", (char *) FPSTR(maxVolumeSet), maxVolume);
+            loggerNl(logBuf, LOGLEVEL_INFO);
+        }
+    }
+#endif
+
 
 bool isNumber(const char *str) {
   byte i = 0;
@@ -3061,6 +3220,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 
 void setup() {
     Serial.begin(115200);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
     srand(esp_random());
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
@@ -3126,7 +3286,19 @@ void setup() {
             #ifdef SD_NOT_MANDATORY_ENABLE
                 break;
             #endif
+            #ifdef SHUTDOWN_IF_SD_BOOT_FAILS
+                if (millis() >= deepsleepTimeAfterBootFails*1000) {
+                    loggerNl((char *) FPSTR(sdBootFailedDeepsleep), LOGLEVEL_ERROR);
+                    esp_deep_sleep_start();
+                }
+            #endif
+
         }
+
+    #ifdef HEADPHONE_ADJUST_ENABLE
+        pinMode(HP_DETECT, INPUT);
+        headphoneLastDetectionState = digitalRead(HP_DETECT);
+    #endif
 
     #ifdef BLUETOOTH_ENABLE
         i2s_pin_config_t pin_config = {
@@ -3229,16 +3401,33 @@ void setup() {
         loggerNl((char *) FPSTR(wroteInitialLoudnessToNvs), LOGLEVEL_ERROR);
     }
 
-    // Get maximum volume from NVS
-    uint32_t nvsMaxVolume = prefsSettings.getUInt("maxVolume", 0);
-    if (nvsMaxVolume) {
-        maxVolume = nvsMaxVolume;
-        snprintf(logBuf, serialLoglength, "%s: %u", (char *) FPSTR(restoredMaxLoudnessFromNvs), nvsMaxVolume);
+    // Get maximum volume for speaker from NVS
+    uint32_t nvsMaxVolumeSpeaker = prefsSettings.getUInt("maxVolumeSp", 0);
+    if (nvsMaxVolumeSpeaker) {
+        maxVolumeSpeaker = nvsMaxVolumeSpeaker;
+        maxVolume = maxVolumeSpeaker;
+        snprintf(logBuf, serialLoglength, "%s: %u", (char *) FPSTR(restoredMaxLoudnessForSpeakerFromNvs), nvsMaxVolumeSpeaker);
         loggerNl(logBuf, LOGLEVEL_INFO);
     } else {
-        prefsSettings.putUInt("maxVolume", maxVolume);
-        loggerNl((char *) FPSTR(wroteMaxLoudnessToNvs), LOGLEVEL_ERROR);
+        prefsSettings.putUInt("maxVolumeSp", nvsMaxVolumeSpeaker);
+        loggerNl((char *) FPSTR(wroteMaxLoudnessForSpeakerToNvs), LOGLEVEL_ERROR);
     }
+
+    #ifdef HEADPHONE_ADJUST_ENABLE
+        // Get maximum volume for headphone from NVS
+        uint32_t nvsMaxVolumeHeadphone = prefsSettings.getUInt("maxVolumeHp", 0);
+        if (nvsMaxVolumeHeadphone) {
+            maxVolumeHeadphone = nvsMaxVolumeHeadphone;
+            snprintf(logBuf, serialLoglength, "%s: %u", (char *) FPSTR(restoredMaxLoudnessForHeadphoneFromNvs), nvsMaxVolumeHeadphone);
+            loggerNl(logBuf, LOGLEVEL_INFO);
+        } else {
+            prefsSettings.putUInt("maxVolumeHp", nvsMaxVolumeHeadphone);
+            loggerNl((char *) FPSTR(wroteMaxLoudnessForHeadphoneToNvs), LOGLEVEL_ERROR);
+        }
+    #endif
+
+    // Adjust volume depending on headphone is connected and volume-adjustment is enabled
+    setupVolume();
 
     // Get MQTT-enable from NVS
     uint8_t nvsEnableMqtt = prefsSettings.getUChar("enableMQTT", 99);
@@ -3322,7 +3511,7 @@ void setup() {
     );
 
 
-    esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
+    //esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
 
     // Activate internal pullups for all buttons
     pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
@@ -3387,6 +3576,12 @@ void setup() {
 
 
 void loop() {
+    #ifdef HEADPHONE_ADJUST_ENABLE
+        headphoneVolumeManager();
+    #endif
+    #ifdef MEASURE_BATTERY_VOLTAGE
+        batteryVoltageTester();
+    #endif
     volumeHandler(minVolume, maxVolume);
     buttonHandler();
     doButtonActions();
