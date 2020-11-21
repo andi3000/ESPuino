@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="RainbowDemo.bin">
-    <CLASSES>
-      <root url="jar://$PROJECT_DIR$/.pio/libdeps/lolin32/FastLED/extras/RainbowDemo.bin.zip!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>
