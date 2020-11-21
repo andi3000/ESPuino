@@ -8,12 +8,12 @@
 //#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two (not yet working!)
 #define SHUTDOWN_IF_SD_BOOT_FAILS   // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
 
-//#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
+#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
 //#define SD_NOT_MANDATORY_ENABLE     // Only for debugging-purposes: Tonuino will also start without mounted SD-card anyway (will only try once to mount it). Will overwrite SHUTDOWN_IF_SD_BOOT_FAILS!
 //#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
 
 #define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
-//#define LOLIN_D32_PRO             // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
+#define LOLIN_D32_PRO             // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
 
 
 #include <ESP32Encoder.h>
@@ -169,17 +169,22 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #ifdef MEASURE_BATTERY_VOLTAGE
     #ifdef LOLIN_D32_PRO
         #define VOLTAGE_READ_PIN            35     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+        float voltageFactor = 7.445;
     #else
         #define VOLTAGE_READ_PIN            33     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+        uint16_t r1 = 391;                              // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
+        uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     #endif
-    uint16_t r1 = 391;                              // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
-    uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     float warningLowVoltage = 3.22;                  // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
     uint8_t voltageCheckInterval = 5;               // How of battery-voltage is measured (in minutes)
 
     // Internal values
-    float refVoltage = 3.3;                         // Operation-voltage of ESP32; don't change!
-    uint16_t maxAnalogValue = 4095;                 // Highest value given by analogRead(); don't change!
+    #ifdef LOLIN_D32_PRO
+        uint16_t maxAnalogValue = 4096;             // Highest value given by analogRead(); don't change!
+    #else
+        float refVoltage = 3.3;                     // Operation-voltage of ESP32; don't change!
+        uint16_t maxAnalogValue = 4095;             // Highest value given by analogRead(); don't change!
+    #endif
     uint32_t lastVoltageCheckTimestamp = 0;
     #ifdef NEOPIXEL_ENABLE
         bool showVoltageWarning = false;
@@ -579,8 +584,12 @@ void IRAM_ATTR onTimer() {
 #ifdef MEASURE_BATTERY_VOLTAGE
     void batteryVoltageTester(void) {
         if ((millis() - lastVoltageCheckTimestamp >= voltageCheckInterval*60000) || (!lastVoltageCheckTimestamp && millis()>=10000)) {
-            float factor = 1 / ((float) r1/(r1+r2));
-            float voltage = ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
+            #ifdef LOLIN_D32_PRO
+                float voltage = analogRead(VOLTAGE_READ_PIN) / maxAnalogValue * voltageFactor;
+            #else
+                float factor = 1 / ((float) r1/(r1+r2));
+                float voltage = ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
+            #endif
 
             #ifdef NEOPIXEL_ENABLE
                 if (voltage <= warningLowVoltage) {
