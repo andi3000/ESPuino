@@ -2,10 +2,8 @@
 #define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
 #define FTP_ENABLE                  // Enables FTP-server
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
-#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+//#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 #define LANGUAGE 1                  // 1 = deutsch; 2 = english
-#define REMOTE_DEBUG_ENABLE
-//#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two
 #define HEADPHONE_ADJUST_ENABLE     // Used to adjust (lower) volume for optional headphone-pcb (refer maxVolumeSpeaker / maxVolumeHeadphone)
 //#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two (not yet working!)
 #define SHUTDOWN_IF_SD_BOOT_FAILS   // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
@@ -13,6 +11,10 @@
 //#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
 //#define SD_NOT_MANDATORY_ENABLE     // Only for debugging-purposes: Tonuino will also start without mounted SD-card anyway (will only try once to mount it). Will overwrite SHUTDOWN_IF_SD_BOOT_FAILS!
 //#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
+
+#define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
+//#define LOLIN_D32_PRO             // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
+
 
 #include <ESP32Encoder.h>
 #include "Arduino.h"
@@ -76,19 +78,38 @@ uint8_t serialLoglength = 200;
 char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all log-messages
 
 // GPIOs (uSD card-reader)
-#define SPISD_CS                        15
-#ifndef SINGLE_SPI_ENABLE
-    #define SPISD_MOSI                  13
-    #define SPISD_MISO                  16          // 12 doesn't work with some devel-boards
-    #define SPISD_SCK                   14
+#ifdef LOLIN_D32_PRO
+    #define SPISD_CS                        4
+    #ifndef SINGLE_SPI_ENABLE
+        #define SPISD_MOSI                  23
+        #define SPISD_MISO                  19          // 12 doesn't work with some devel-boards
+        #define SPISD_SCK                   18
+    #endif
+#else
+    #define SPISD_CS                        15
+    #ifndef SINGLE_SPI_ENABLE
+        #define SPISD_MOSI                  13
+        #define SPISD_MISO                  16          // 12 doesn't work with some devel-boards
+        #define SPISD_SCK                   14
+    #endif
 #endif
 
 // GPIOs (RFID-reader)
-#define RST_PIN                         99          // Not necessary but has to be set anyway; so let's use a dummy-number
-#define RFID_CS                         21
-#define RFID_MOSI                       23
-#define RFID_MISO                       19
-#define RFID_SCK                        18
+#ifdef LOLIN_D32_PRO
+    extern SPIClass SPI_MFRC;                           // Verweis auf SPI_MFRC in Madias Library MFRC522
+    #define RFID_RST                        15
+    #define RFID_CS                         2
+    #define RFID_MOSI                       13
+    #define RFID_MISO                       39
+    #define RFID_SCK                        14
+    MFRC522 mfrc522(RFID_CS, RFID_RST);
+#else
+    #define RFID_RST                        99          // Not necessary but has to be set anyway; so let's use a dummy-number
+    #define RFID_CS                         21
+    #define RFID_MOSI                       23
+    #define RFID_MISO                       19
+    #define RFID_SCK                        18
+#endif
 
 // GPIOs (DAC)
 #define I2S_DOUT                        25
@@ -110,23 +131,47 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #endif
 
 // GPIO used to trigger transistor-circuit / RFID-reader
-#define POWER                           17
+#ifdef LOLIN_D32_PRO
+    #define POWER                           21
+#else
+    #define POWER                           17
+#endif
 
 // GPIOs (Rotary encoder)
-#define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-#define DREHENCODER_DT                  35          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-#define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
+#ifdef LOLIN_D32_PRO
+    #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+    #define DREHENCODER_DT                  34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+    #define DREHENCODER_BUTTON              16
+#else
+    #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+    #define DREHENCODER_DT                  35          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+    #define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
+#endif
 
 // GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                5
-#define NEXT_BUTTON                     4
-#define PREVIOUS_BUTTON                 2           // Please note: as of 19.11.2020 changed from 33 to 2
+#ifdef LOLIN_D32_PRO
+    #define PAUSEPLAY_BUTTON                12
+    #define NEXT_BUTTON                     32
+    #define PREVIOUS_BUTTON                 33
+#else
+    #define PAUSEPLAY_BUTTON                5
+    #define NEXT_BUTTON                     4
+    #define PREVIOUS_BUTTON                 2       // Please note: as of 19.11.2020 changed from 33 to 2
+#endif
 
 // GPIOs (LEDs)
-#define LED_PIN                         12          // Pin where Neopixel is connected to
+#ifdef LOLIN_D32_PRO
+    #define LED_PIN                         5      // Pin where Neopixel is connected to
+#else
+    #define LED_PIN                         12     // Pin where Neopixel is connected to
+#endif
 
 #ifdef MEASURE_BATTERY_VOLTAGE
-    #define VOLTAGE_READ_PIN            33          // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+    #ifdef LOLIN_D32_PRO
+        #define VOLTAGE_READ_PIN            35     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+    #else
+        #define VOLTAGE_READ_PIN            33     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+    #endif
     uint16_t r1 = 391;                              // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     float warningLowVoltage = 3.22;                  // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
@@ -348,7 +393,9 @@ static const char restartWebsite[] PROGMEM = "<p>Der Tonuino wird neu gestartet.
 
 
 // Audio/mp3
-SPIClass spiSD(HSPI);
+#ifndef LOLIN_D32_PRO
+    SPIClass spiSD(HSPI);
+#endif
 TaskHandle_t mp3Play;
 TaskHandle_t rfid;
 #ifdef NEOPIXEL_ENABLE
@@ -1591,9 +1638,13 @@ void playAudio(void *parameter) {
 
 // Instructs RFID-scanner to scan for new RFID-tags
 void rfidScanner(void *parameter) {
-    static MFRC522 mfrc522(RFID_CS, RST_PIN);
+    static MFRC522 mfrc522(RFID_CS, RFID_RST);
     #ifndef SINGLE_SPI_ENABLE
-        SPI.begin();
+        #ifdef LOLIN_D32_PRO
+            SPI.begin(4);
+        #else
+            SPI.begin();
+        #endif
     #endif
     mfrc522.PCD_Init();
     mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader detail
@@ -3268,18 +3319,27 @@ void setup() {
     digitalWrite(SPISD_CS, HIGH);
 
     #ifndef SINGLE_SPI_ENABLE
-        spiSD.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
-        spiSD.setFrequency(1000000);
+        #ifdef LOLIN_D32_PRO
+            SPI.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
+            SPI.setFrequency(1000000);
+        #else
+            spiSD.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
+            spiSD.setFrequency(1000000);
+        #endif
     #else
         //SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI);
         SPI.begin();
         SPI.setFrequency(1000000);
     #endif
 
-    #ifndef SINGLE_SPI_ENABLE
-        while (!SD.begin(SPISD_CS, spiSD)) {
-    #else
+    #ifdef LOLIN_D32_PRO
+        SPI_MFRC.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_CS);
+    #endif
+
+    #ifdef LOLIN_D32_PRO || SINGLE_SPI_ENABLE
         while (!SD.begin(SPISD_CS)) {
+    #else
+        while (!SD.begin(SPISD_CS, spiSD)) {
     #endif
             loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
             delay(500);
