@@ -95,16 +95,15 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #endif
 
 // GPIOs (RFID-reader)
+#define RFID_RST                            99          // Not necessary but has to be set anyway; so let's use a dummy-number
 #ifdef LOLIN_D32_PRO
     extern SPIClass SPI_MFRC;                           // Verweis auf SPI_MFRC in Madias Library MFRC522
-    #define RFID_RST                        15
     #define RFID_CS                         2
     #define RFID_MOSI                       13
     #define RFID_MISO                       39
     #define RFID_SCK                        14
     MFRC522 mfrc522(RFID_CS, RFID_RST);
 #else
-    #define RFID_RST                        99          // Not necessary but has to be set anyway; so let's use a dummy-number
     #define RFID_CS                         21
     #define RFID_MOSI                       23
     #define RFID_MISO                       19
