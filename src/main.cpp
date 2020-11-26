@@ -13,7 +13,7 @@
 //#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
 
 #define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
-#define LOLIN_D32_PRO             // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
+#define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
 
 
 #include <ESP32Encoder.h>
@@ -176,7 +176,7 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
         uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     #endif
     float warningLowVoltage = 3.22;                  // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
-    uint8_t voltageCheckInterval = 5;               // How of battery-voltage is measured (in minutes)
+    uint8_t voltageCheckInterval = 5;               // How often battery-voltage is measured (in minutes)
 
     // Internal values
     #ifdef LOLIN_D32_PRO
@@ -585,7 +585,7 @@ void IRAM_ATTR onTimer() {
     void batteryVoltageTester(void) {
         if ((millis() - lastVoltageCheckTimestamp >= voltageCheckInterval*60000) || (!lastVoltageCheckTimestamp && millis()>=10000)) {
             #ifdef LOLIN_D32_PRO
-                float voltage = analogRead(VOLTAGE_READ_PIN) / maxAnalogValue * voltageFactor;
+                float voltage = ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * voltageFactor;
             #else
                 float factor = 1 / ((float) r1/(r1+r2));
                 float voltage = ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
