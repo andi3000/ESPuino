@@ -14,6 +14,7 @@
 
 #define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
 #define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
+#define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, instead of rotary encoder
 
 
 #include <ESP32Encoder.h>
@@ -138,13 +139,23 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 
 // GPIOs (Rotary encoder)
 #ifdef LOLIN_D32_PRO
-    #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-    #define DREHENCODER_DT                  34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-    #define DREHENCODER_BUTTON              16
+    #ifdef FIVE_BUTTONS
+        #define VOLUME_UP_BUTTON               19
+        #define VOLUME_DOWN_BUTTON             3
+    #else
+        #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+        #define DREHENCODER_DT                  34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+        #define DREHENCODER_BUTTON              16
+    #endif
 #else
-    #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-    #define DREHENCODER_DT                  35          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-    #define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
+    #ifdef FIVE_BUTTONS
+        #define VOLUME_UP_BUTTON                19          // Pin not tested, you propably need to change them 
+        #define VOLUME_DOWN_BUTTON              3           // Pin not tested, you propably need to change them
+    #else
+        #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+        #define DREHENCODER_DT                  35          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
+        #define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
+    #endif
 #endif
 
 // GPIOs (Control-buttons)
@@ -155,34 +166,34 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #else
     #define PAUSEPLAY_BUTTON                5
     #define NEXT_BUTTON                     4
-    #define PREVIOUS_BUTTON                 2       // Please note: as of 19.11.2020 changed from 33 to 2
+    #define PREVIOUS_BUTTON                 2               // Please note: as of 19.11.2020 changed from 33 to 2
 #endif
 
 // GPIOs (LEDs)
 #ifdef LOLIN_D32_PRO
-    #define LED_PIN                         5      // Pin where Neopixel is connected to
+    #define LED_PIN                         5               // Pin where Neopixel is connected to
 #else
-    #define LED_PIN                         12     // Pin where Neopixel is connected to
+    #define LED_PIN                         12              // Pin where Neopixel is connected to
 #endif
 
 #ifdef MEASURE_BATTERY_VOLTAGE
     #ifdef LOLIN_D32_PRO
-        #define VOLTAGE_READ_PIN            35     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+        #define VOLTAGE_READ_PIN            35              // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
         float voltageFactor = 7.445;
     #else
-        #define VOLTAGE_READ_PIN            33     // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
-        uint16_t r1 = 391;                              // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
-        uint8_t r2 = 128;                               // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
+        #define VOLTAGE_READ_PIN            33              // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
+        uint16_t r1 = 391;                                  // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
+        uint8_t r2 = 128;                                   // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     #endif
-    float warningLowVoltage = 3.22;                  // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
-    uint8_t voltageCheckInterval = 5;               // How often battery-voltage is measured (in minutes)
+    float warningLowVoltage = 3.22;                         // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
+    uint8_t voltageCheckInterval = 5;                       // How often battery-voltage is measured (in minutes)
 
     // Internal values
     #ifdef LOLIN_D32_PRO
-        uint16_t maxAnalogValue = 4096;             // Highest value given by analogRead(); don't change!
+        uint16_t maxAnalogValue = 4096;                     // Highest value given by analogRead(); don't change!
     #else
-        float refVoltage = 3.3;                     // Operation-voltage of ESP32; don't change!
-        uint16_t maxAnalogValue = 4095;             // Highest value given by analogRead(); don't change!
+        float refVoltage = 3.3;                             // Operation-voltage of ESP32; don't change!
+        uint16_t maxAnalogValue = 4095;                     // Highest value given by analogRead(); don't change!
     #endif
     uint32_t lastVoltageCheckTimestamp = 0;
     #ifdef NEOPIXEL_ENABLE
@@ -192,8 +203,8 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    12          // number of LEDs
-    #define CHIPSET                     WS2812      // type of Neopixel
+    #define NUM_LEDS                    12                  // number of LEDs
+    #define CHIPSET                     WS2812              // type of Neopixel
     #define COLOR_ORDER                 GRB
 #endif
 
@@ -205,6 +216,10 @@ char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all 
 #define PREVIOUSTRACK                   5           // Previous track of playlist
 #define FIRSTTRACK                      6           // First track of playlist
 #define LASTTRACK                       7           // Last track of playlist
+#ifdef FIVE_BUTTONS
+    #define VOLUME_UP                   8           // Volume up
+    #define VOLUME_DOWN                 9           // Volume down
+#endif
 
 // Playmodes
 #define NO_PLAYLIST                     0           // If no playlist is active
@@ -338,9 +353,11 @@ bool gotoSleep = false;                                 // Flag for turning uC i
 bool lockControls = false;                              // Flag if buttons and rotary encoder is locked
 bool bootComplete = false;
 // Rotary encoder-helper
-int32_t lastEncoderValue;
-int32_t currentEncoderValue;
-int32_t lastVolume = -1;                                // Don't change -1 as initial-value!
+#ifndef FIVE_BUTTONS
+    int32_t lastEncoderValue;
+    int32_t currentEncoderValue;
+    int32_t lastVolume = -1;                            // Don't change -1 as initial-value!
+#endif
 uint8_t currentVolume = initVolume;
 ////////////
 
@@ -430,7 +447,9 @@ IPAddress myIP;
 #endif
 
 // Rotary encoder-configuration
-ESP32Encoder encoder;
+#ifndef FIVE_BUTTONS
+    ESP32Encoder encoder;
+#endif
 
 // HW-Timer
 hw_timer_t *timer = NULL;
@@ -445,7 +464,11 @@ typedef struct {
     unsigned long lastPressedTimestamp;
     unsigned long lastReleasedTimestamp;
 } t_button;
-t_button buttons[4];
+#ifdef FIVE_BUTTONS
+    t_button buttons[5];
+ #else
+    t_button buttons[4];
+ #endif
 
 Preferences prefsRfid;
 Preferences prefsSettings;
@@ -505,7 +528,11 @@ void rfidPreferenceLookupHandler (void);
 void sendWebsocketData(uint32_t client, uint8_t code);
 void setupVolume(void);
 void trackQueueDispatcher(const char *_sdFile, const uint32_t _lastPlayPos, const uint32_t _playMode, const uint16_t _trackLastPlayed);
-void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume);
+#ifdef FIVE_BUTTONS
+    void volumeHandlerButton(const uint8_t volumeCommand);
+#else
+    void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume);
+#endif
 void volumeToQueueSender(const int32_t _newVolume);
 wl_status_t wifiManager(void);
 bool writeWifiStatusToNVS(bool wifiStatus);
@@ -595,7 +622,12 @@ void buttonHandler() {
         buttons[0].currentState = digitalRead(NEXT_BUTTON);
         buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
         buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
-        buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
+        #ifdef FIVE_BUTTONS
+            buttons[3].currentState = digitalRead(VOLUME_UP_BUTTON);
+            buttons[4].currentState = digitalRead(VOLUME_DOWN_BUTTON);
+        #else
+            buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
+        #endif
 
         // Iterate over all buttons in struct-array
         for (uint8_t i=0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
@@ -681,10 +713,20 @@ void doButtonActions(void) {
                         trackControlToQueueSender(PAUSEPLAY);
                         buttons[i].isPressed = false;
                         break;
-
-                    case 3:
-                        //gotoSleep = true;
-                        break;
+                    #ifdef FIVE_BUTTONS
+                        case 3:
+                            volumeHandlerButton(VOLUME_UP);
+                            buttons[i].isPressed = false;
+                            break;
+                        case 4:
+                            volumeHandlerButton(VOLUME_DOWN);
+                            buttons[i].isPressed = false;
+                            break;
+                    #else
+                        case 3:
+                            //gotoSleep = true;
+                            break;
+                    #endif
                     }
                 }
             }
@@ -838,8 +880,10 @@ void callback(const char *topic, const byte *payload, uint32_t length) {
     else if (strcmp_P(topic, topicLoudnessCmnd) == 0) {
         unsigned long vol = strtoul(receivedString, NULL, 10);
         volumeToQueueSender(vol);
-        encoder.clearCount();
-        encoder.setCount(vol * 2);      // Update encoder-value to keep it in-sync with MQTT-updates
+        #ifndef FIVE_BUTTONS
+            encoder.clearCount();
+            encoder.setCount(vol * 2);      // Update encoder-value to keep it in-sync with MQTT-updates
+        #endif
     }
     // Modify sleep-timer?
     else if (strcmp_P(topic, topicSleepTimerCmnd) == 0) {
@@ -2105,8 +2149,28 @@ void trackControlToQueueSender(const uint8_t trackCommand) {
     xQueueSend(trackControlQueue, &trackCommand, 0);
 }
 
+// Handles volume directed by buttons
+#ifdef FIVE_BUTTONS
+void volumeHandlerButton(const uint8_t volumeCommand) {
+    if (volumeCommand == VOLUME_UP) {
+        if (currentVolume >= maxVolume) {
+            loggerNl((char *) FPSTR(maxLoudnessReached), LOGLEVEL_INFO);
+        } else {
+            currentVolume++;
+        }
+    } else {
+        if (currentVolume <= minVolume) {
+            loggerNl((char *) FPSTR(minLoudnessReached), LOGLEVEL_INFO);
+        } else {
+            currentVolume--;
+        }
+    }
+    volumeToQueueSender(currentVolume);
+}
+#endif
 
 // Handles volume directed by rotary encoder
+#ifndef FIVE_BUTTONS
 void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume) {
     if (lockControls) {
         encoder.clearCount();
@@ -2137,6 +2201,7 @@ void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume) {
         }
     }
 }
+#endif
 
 
 // Receives de-serialized RFID-data (from NVS) and dispatches playlists for the given
@@ -3325,7 +3390,11 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 
 void setup() {
     Serial.begin(115200);
-    esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
+    #ifdef FIVE_BUTTONS
+        esp_sleep_enable_ext0_wakeup((gpio_num_t) PAUSEPLAY_BUTTON, 0);
+    #else
+        esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
+    #endif
     srand(esp_random());
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
@@ -3628,15 +3697,22 @@ void setup() {
     //esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
 
     // Activate internal pullups for all buttons
-    pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
+    #ifdef FIVE_BUTTONS
+        pinMode(VOLUME_UP_BUTTON, INPUT_PULLUP);
+        pinMode(VOLUME_DOWN_BUTTON, INPUT_PULLUP);
+    #else
+        pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
+    #endif
     pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
     pinMode(NEXT_BUTTON, INPUT_PULLUP);
     pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);
 
     // Init rotary encoder
-    encoder.attachHalfQuad(DREHENCODER_CLK, DREHENCODER_DT);
-    encoder.clearCount();
-    encoder.setCount(initVolume*2);         // Ganzes Raster ist immer +2, daher initiale Lautstärke mit 2 multiplizieren
+    #ifndef FIVE_BUTTONS
+        encoder.attachHalfQuad(DREHENCODER_CLK, DREHENCODER_DT);
+        encoder.clearCount();
+        encoder.setCount(initVolume*2);         // Ganzes Raster ist immer +2, daher initiale Lautstärke mit 2 multiplizieren
+    #endif
 
     // Only enable MQTT if requested
     #ifdef MQTT_ENABLE
@@ -3691,7 +3767,9 @@ void loop() {
     #ifdef MEASURE_BATTERY_VOLTAGE
         batteryVoltageTester();
     #endif
-    volumeHandler(minVolume, maxVolume);
+    #ifndef FIVE_BUTTONS
+        volumeHandler(minVolume, maxVolume);
+    #endif
     buttonHandler();
     doButtonActions();
     sleepHandler();
