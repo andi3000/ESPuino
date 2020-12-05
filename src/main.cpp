@@ -19,7 +19,9 @@
 #define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, INSTEAD of rotary encoder (its still WIP !!!)
 
 
-#include <ESP32Encoder.h>
+#ifndef FIVE_BUTTONS
+    #include <ESP32Encoder.h>
+#endif
 #include "Arduino.h"
 #include <WiFi.h>
 #ifdef FTP_ENABLE
@@ -182,12 +184,6 @@ const char * DIRECTORY_INDEX_FILE = "/files.json"; //  filename of files.json in
     #define LED_PIN                         12              // Pin where Neopixel is connected to
 #endif
 
-// (optional) Default-voltages for battery-monitoring
-float warningLowVoltage = 3.4;                      // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel (can be changed via GUI!)
-uint8_t voltageCheckInterval = 10;                  // How of battery-voltage is measured (in minutes) (can be changed via GUI!)
-float voltageIndicatorLow = 3.0;                    // Lower range for Neopixel-voltage-indication (0 leds) (can be changed via GUI!)
-float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-voltage-indication (all leds) (can be changed via GUI!)
-
 #ifdef MEASURE_BATTERY_VOLTAGE
     #ifdef LOLIN_D32_PRO
         #define VOLTAGE_READ_PIN            35              // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
@@ -197,8 +193,11 @@ float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-
         uint16_t r1 = 389;                                  // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
         uint8_t r2 = 129;                                   // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
     #endif
-    float warningLowVoltage = 3.22;                         // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel
-    uint8_t voltageCheckInterval = 5;                       // How often battery-voltage is measured (in minutes)
+    // (optional) Default-voltages for battery-monitoring
+    float warningLowVoltage = 3.4;                      // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel (can be changed via GUI!)
+    uint8_t voltageCheckInterval = 10;                  // How of battery-voltage is measured (in minutes) (can be changed via GUI!)
+    float voltageIndicatorLow = 3.0;                    // Lower range for Neopixel-voltage-indication (0 leds) (can be changed via GUI!)
+    float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-voltage-indication (all leds) (can be changed via GUI!)
 
     // Internal values
     uint16_t maxAnalogValue = 4095;                     // Highest value given by analogRead(); don't change!
