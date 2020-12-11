@@ -60,8 +60,8 @@
 // Rotary encoder
 #ifdef LOLIN_D32_PRO
     #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON               19
-        #define VOLUME_DOWN_BUTTON             3
+        #define VOLUME_UP_BUTTON               0            // GPIO for volume up button
+        #define VOLUME_DOWN_BUTTON             3            // GPIO for volume down button
     #else
         #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT (in software or hardware)
         #define DREHENCODER_DT                  34          // Info: Lolin D32 / Lolin D32 pro 35 are using 35 for battery-voltage-monitoring!
@@ -69,8 +69,8 @@
     #endif
 #else
     #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON                19          // Pin not tested, you propably need to change them
-        #define VOLUME_DOWN_BUTTON              3           // Pin not tested, you propably need to change them
+        #define VOLUME_UP_BUTTON                0           // Pin not tested (yet), you propably need to change it
+        #define VOLUME_DOWN_BUTTON              3           // Pin not tested (yet), you propably need to change it
     #else
         #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT (in software or hardware)
         #define DREHENCODER_DT                  35          // Info: Lolin D32 / Lolin D32 pro 35 are using 35 for battery-voltage-monitoring!
@@ -130,7 +130,10 @@ const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for ser
 
 // Buttons (better leave unchanged if in doubts :-))
 uint8_t buttonDebounceInterval = 50;                // Interval in ms to software-debounce buttons
-uint16_t intervalToLongPress = 700;                 // Interval in ms to distinguish between short and long press of previous/next-button
+uint16_t intervalToLongPress = 1500;                // Interval in ms to distinguish between short and long press of previous/next-button, preset= 700
+#ifdef FIVE_BUTTONS
+    uint16_t additionalShutdownInterval = 700;          // Additional interval in ms to init shutdown
+#endif
 
 // RFID
 #define RFID_SCAN_INTERVAL 300                      // Interval-time in ms (how often is RFID read?)

@@ -310,8 +310,10 @@ typedef struct {
 } t_button;
 #ifdef FIVE_BUTTONS
     t_button buttons[5];
+    uint8_t shutdownButtonIndex = 2;
 #else
     t_button buttons[4];
+    uint8_t shutdownButtonIndex = 3;
 #endif
 
 Preferences prefsRfid;
@@ -748,7 +750,12 @@ void doButtonActions(void) {
     for (uint8_t i=0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
         if (buttons[i].isPressed) {
             if (buttons[i].lastReleasedTimestamp > buttons[i].lastPressedTimestamp) {
-                if (buttons[i].lastReleasedTimestamp - buttons[i].lastPressedTimestamp >= intervalToLongPress) {
+                #ifdef FIVE_BUTTONS
+                    uint16_t customIntervalToLongPress = (i == shutdownButtonIndex) ? intervalToLongPress + additionalShutdownInterval : intervalToLongPress;
+                #else
+                    uint16_t customIntervalToLongPress = intervalToLongPress;
+                #endif
+                if (buttons[i].lastReleasedTimestamp - buttons[i].lastPressedTimestamp >= customIntervalToLongPress) {
                     switch (i)      // Long-press-actions
                     {
                     case 0:
@@ -1915,19 +1922,15 @@ void showLed(void *parameter) {
             lastLedBrightness = ledBrightness;
         }
 
+        // shutdown red LED ring
+        if (!buttons[shutdownButtonIndex].currentState) {
         #ifdef FIVE_BUTTONS
-        if (!buttons[2].currentState) {
-        #else
-        if (!buttons[3].currentState) {
+            delay(additionalShutdownInterval);
         #endif
             FastLED.clear();
             for (uint8_t led = 0; led < NUM_LEDS; led++) {
                 leds[ledAddress(led)] = CRGB::Red;
-                #ifdef FIVE_BUTTONS
-                if (buttons[2].currentState) {
-                #else
-                if (buttons[3].currentState) {
-                #endif
+                if (buttons[shutdownButtonIndex].currentState) {
                     FastLED.clear();
                     FastLED.show();
                     delay(5);
@@ -2032,11 +2035,7 @@ void showLed(void *parameter) {
             FastLED.show();
 
             for (uint8_t i=0; i<=50; i++) {
-                #ifdef FIVE_BUTTONS
-                if (hlastVolume != currentVolume || showLedError || showLedOk || !buttons[2].currentState) {
-                #else
-                if (hlastVolume != currentVolume || showLedError || showLedOk || !buttons[3].currentState) {
-                #endif
+                if (hlastVolume != currentVolume || showLedError || showLedOk || !buttons[shutdownButtonIndex].currentState) {
                     if (hlastVolume != currentVolume) {
                         volumeChangeShown = false;
                     }
@@ -2052,11 +2051,7 @@ void showLed(void *parameter) {
             for (uint8_t i=NUM_LEDS-1; i>0; i--) {
                 leds[ledAddress(i)] = CRGB::Black;
                 FastLED.show();
-                #ifdef FIVE_BUTTONS
-                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[2].currentState) {
-                #else
-                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                #endif
+                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[shutdownButtonIndex].currentState) {
                     break;
                 } else {
                     vTaskDelay(portTICK_RATE_MS*30);
@@ -2073,17 +2068,9 @@ void showLed(void *parameter) {
                     leds[ledAddress(i)] = CRGB::Blue;
                     FastLED.show();
                     #ifdef MEASURE_BATTERY_VOLTAGE
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[shutdownButtonIndex].currentState) {
                     #else
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[shutdownButtonIndex].currentState) {
                     #endif
                         break;
                     } else {
@@ -2093,17 +2080,9 @@ void showLed(void *parameter) {
 
                 for (uint8_t i=0; i<=100; i++) {
                     #ifdef MEASURE_BATTERY_VOLTAGE
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[shutdownButtonIndex].currentState) {
                     #else
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[shutdownButtonIndex].currentState) {
                     #endif
                         break;
                     } else {
@@ -2115,17 +2094,9 @@ void showLed(void *parameter) {
                     leds[ledAddress(i)-1] = CRGB::Black;
                     FastLED.show();
                     #ifdef MEASURE_BATTERY_VOLTAGE
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || !buttons[shutdownButtonIndex].currentState) {
                     #else
-                        #ifdef FIVE_BUTTONS
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[2].currentState) {
-                        #else
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        #endif
+                        if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[shutdownButtonIndex].currentState) {
                     #endif
                         break;
                     } else {
@@ -2154,17 +2125,9 @@ void showLed(void *parameter) {
                         FastLED.show();
                         for (uint8_t i=0; i<=50; i++) {
                             #ifdef MEASURE_BATTERY_VOLTAGE
-                                #ifdef FIVE_BUTTONS
-                                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || playProperties.playMode != NO_PLAYLIST || !buttons[2].currentState) {
-                                #else
-                                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
-                                #endif
+                                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || showVoltageWarning || showLedVoltage || playProperties.playMode != NO_PLAYLIST || !buttons[shutdownButtonIndex].currentState) {
                             #else
-                                #ifdef FIVE_BUTTONS
-                                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[2].currentState) {
-                                #else
-                                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
-                                #endif
+                                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[shutdownButtonIndex].currentState) {
                             #endif
                                 break;
                             } else {
@@ -2201,17 +2164,9 @@ void showLed(void *parameter) {
             default:                            // If playlist is active (doesn't matter which type)
                 if (!playProperties.playlistFinished) {
                     #ifdef MEASURE_BATTERY_VOLTAGE
-                        #ifdef FIVE_BUTTONS
-                            if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || showVoltageWarning || showLedVoltage || !buttons[2].currentState) {
-                        #else
-                            if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || showVoltageWarning || showLedVoltage || !buttons[3].currentState) {
-                        #endif
+                        if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || showVoltageWarning || showLedVoltage || !buttons[shutdownButtonIndex].currentState) {
                     #else
-                        #ifdef FIVE_BUTTONS
-                            if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[2].currentState) {
-                        #else
-                            if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[3].currentState) {
-                        #endif
+                        if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[shutdownButtonIndex].currentState) {
                     #endif
                         lastPlayState = playProperties.pausePlay;
                         lastLockState = lockControls;
