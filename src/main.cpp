@@ -1,29 +1,13 @@
-// Define modules to compile:
-#define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
-#define FTP_ENABLE                  // Enables FTP-server
-#define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
-//#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
-#define LANGUAGE 1                  // 1 = deutsch; 2 = english
-#define HEADPHONE_ADJUST_ENABLE     // Used to adjust (lower) volume for optional headphone-pcb (refer maxVolumeSpeaker / maxVolumeHeadphone)
-//#define SINGLE_SPI_ENABLE           // If only one SPI-instance should be used instead of two (not yet working!)
-#define SHUTDOWN_IF_SD_BOOT_FAILS   // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
-#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
-//#define PLAY_LAST_RFID_AFTER_REBOOT // When restarting Tonuino, the last RFID that was active before, is recalled and played
+// !!! MAKE SURE TO EDIT settings.h !!!
 
-
-//#define SD_NOT_MANDATORY_ENABLE     // Only for debugging-purposes: Tonuino will also start without mounted SD-card anyway (will only try once to mount it). Will overwrite SHUTDOWN_IF_SD_BOOT_FAILS!
-//#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
-
-#define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
-#define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
-#define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, INSTEAD of rotary encoder (its still WIP !!!)
-
-
+#include "settings.h"                       // Contains all user-relevant settings
 #ifndef FIVE_BUTTONS
     #include <ESP32Encoder.h>
 #endif
-#include "Arduino.h"
 #include <WiFi.h>
+#ifdef MDNS_ENABLE
+    #include <ESPmDNS.h>
+#endif
 #ifdef FTP_ENABLE
     #include "ESP32FtpServer.h"
 #endif
@@ -36,6 +20,10 @@
 #include "FS.h"
 #include "esp_task_wdt.h"
 #include <MFRC522.h>
+#ifdef LOLIN_D32_PRO
+    extern SPIClass SPI_MFRC;                           // Verweis auf SPI_MFRC in Madias Library MFRC522
+    MFRC522 mfrc522(RFID_CS, RFID_RST);
+#endif
 #include <Preferences.h>
 #ifdef MQTT_ENABLE
     #include <PubSubClient.h>
@@ -45,15 +33,19 @@
     #include <FastLED.h>
 #endif
 
+#ifdef MDNS_ENABLE
+    #include <ESPmDNS.h>
+#endif
+
 #if (LANGUAGE == 1)
     #include "logmessages.h"
-    #include "websiteMgmt.h"
-    #include "websiteBasic.h"
+    #include "HTMLmanagement.h"
+    #include "HTMLaccesspoint.h"
 #endif
 #if (LANGUAGE == 2)
     #include "logmessages_EN.h"
-    #include "websiteMgmt_EN.h"
-    #include "websiteBasic_EN.h"
+    #include "HTMLmanagement_EN.h"
+    #include "HTMLaccesspoint_EN.h"
 #endif
 
 #include <AsyncTCP.h>
@@ -64,72 +56,15 @@
     #include <RemoteDebug.h>
 #endif
 
-
 // Info-docs:
 // https://docs.aws.amazon.com/de_de/freertos-kernel/latest/dg/queue-management.html
 // https://arduino-esp8266.readthedocs.io/en/latest/PROGMEM.html#how-do-i-declare-a-global-flash-string-and-use-it
-
-// Loglevels
-#define LOGLEVEL_ERROR                  1           // only errors
-#define LOGLEVEL_NOTICE                 2           // errors + important messages
-#define LOGLEVEL_INFO                   3           // infos + errors + important messages
-#define LOGLEVEL_DEBUG                  4           // almost everything
-
-// Serial-logging-configuration
-const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for serial console
 
 // Serial-logging buffer
 uint8_t serialLoglength = 200;
 char *logBuf = (char*) calloc(serialLoglength, sizeof(char)); // Buffer for all log-messages
 
-// File Browser
-uint8_t FS_DEPTH = 3; // max recursion depth of file tree
-const char * DIRECTORY_INDEX_FILE = "/files.json"; //  filename of files.json index file
-
-// GPIOs (uSD card-reader)
-#ifdef LOLIN_D32_PRO
-    #define SPISD_CS                        4
-    #ifndef SINGLE_SPI_ENABLE
-        #define SPISD_MOSI                  23
-        #define SPISD_MISO                  19          // 12 doesn't work with some devel-boards
-        #define SPISD_SCK                   18
-    #endif
-#else
-    #define SPISD_CS                        15
-    #ifndef SINGLE_SPI_ENABLE
-        #define SPISD_MOSI                  13
-        #define SPISD_MISO                  16          // 12 doesn't work with some devel-boards
-        #define SPISD_SCK                   14
-    #endif
-#endif
-
-// GPIOs (RFID-reader)
-#define RFID_RST                            99          // Not necessary but has to be set anyway; so let's use a dummy-number
-#ifdef LOLIN_D32_PRO
-    extern SPIClass SPI_MFRC;                           // Verweis auf SPI_MFRC in Madias Library MFRC522
-    #define RFID_CS                         2
-    #define RFID_MOSI                       13
-    #define RFID_MISO                       39
-    #define RFID_SCK                        14
-    MFRC522 mfrc522(RFID_CS, RFID_RST);
-#else
-    #define RFID_CS                         21
-    #define RFID_MOSI                       23
-    #define RFID_MISO                       19
-    #define RFID_SCK                        18
-#endif
-
-// GPIOs (DAC)
-#define I2S_DOUT                        25
-#define I2S_BCLK                        27
-#define I2S_LRC                         26
-
-// GPIO to detect if headphone was plugged in (pulled to GND)
 #ifdef HEADPHONE_ADJUST_ENABLE
-    #define HP_DETECT                   22              // Detects if there's a plug in the headphone jack or not
-    uint16_t headphoneLastDetectionDebounce = 1000;     // Debounce-interval in ms when plugging in headphone
-
-    // Internal values
     bool headphoneLastDetectionState;
     uint32_t headphoneLastDetectionTimestamp = 0;
 #endif
@@ -138,83 +73,13 @@ const char * DIRECTORY_INDEX_FILE = "/files.json"; //  filename of files.json in
     BluetoothA2DPSink a2dp_sink;
 #endif
 
-// GPIO used to trigger transistor-circuit / RFID-reader
-#ifdef LOLIN_D32_PRO
-    #define POWER                           21
-#else
-    #define POWER                           17
-#endif
-
-// GPIOs (Rotary encoder)
-#ifdef LOLIN_D32_PRO
-    #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON               19
-        #define VOLUME_DOWN_BUTTON             3
-    #else
-        #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-        #define DREHENCODER_DT                  34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-        #define DREHENCODER_BUTTON              16
-    #endif
-#else
-    #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON                19          // Pin not tested, you propably need to change them
-        #define VOLUME_DOWN_BUTTON              3           // Pin not tested, you propably need to change them
-    #else
-        #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT
-        #define DREHENCODER_DT                  35          // Info: Lolin D32 / Lolin D32 pro 35 are using 35 for battery-voltage-monitoring!
-        #define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
-    #endif
-#endif
-
-// GPIOs (Control-buttons)
-#ifdef LOLIN_D32_PRO
-    #define PAUSEPLAY_BUTTON                12
-    #define NEXT_BUTTON                     32
-    #define PREVIOUS_BUTTON                 33
-#else
-    #define PAUSEPLAY_BUTTON                5
-    #define NEXT_BUTTON                     4
-    #define PREVIOUS_BUTTON                 2               // Please note: as of 19.11.2020 changed from 33 to 2
-#endif
-
-// GPIOs (LEDs)
-#ifdef LOLIN_D32_PRO
-    #define LED_PIN                         5               // Pin where Neopixel is connected to
-#else
-    #define LED_PIN                         12              // Pin where Neopixel is connected to
-#endif
-
 #ifdef MEASURE_BATTERY_VOLTAGE
-    #ifdef LOLIN_D32_PRO
-        #define VOLTAGE_READ_PIN            35              // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
-        float voltageFactor = 7.445;
-    #else
-        #define VOLTAGE_READ_PIN            33              // Pin to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro
-        uint16_t r1 = 389;                                  // First resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
-        uint8_t r2 = 129;                                   // Second resistor of voltage-divider (kOhms) (measure exact value with multimeter!)
-    #endif
-    // (optional) Default-voltages for battery-monitoring
-    float warningLowVoltage = 3.4;                      // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel (can be changed via GUI!)
-    uint8_t voltageCheckInterval = 10;                  // How of battery-voltage is measured (in minutes) (can be changed via GUI!)
-    float voltageIndicatorLow = 3.0;                    // Lower range for Neopixel-voltage-indication (0 leds) (can be changed via GUI!)
-    float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-voltage-indication (all leds) (can be changed via GUI!)
-
-    // Internal values
-    uint16_t maxAnalogValue = 4095;                     // Highest value given by analogRead(); don't change!
-    #ifndef LOLIN_D32_PRO
-        float refVoltage = 3.3;                             // Operation-voltage of ESP32; don't change!
-    #endif
+    float refVoltage = 3.3;                         // Operation-voltage of ESP32; don't change!
+    uint16_t maxAnalogValue = 4095;                 // Highest value given by analogRead(); don't change!
     uint32_t lastVoltageCheckTimestamp = 0;
     #ifdef NEOPIXEL_ENABLE
         bool showVoltageWarning = false;
     #endif
-#endif
-
-// Neopixel-configuration
-#ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    12                  // number of LEDs
-    #define CHIPSET                     WS2812              // type of Neopixel
-    #define COLOR_ORDER                 GRB
 #endif
 
 #ifdef PLAY_LAST_RFID_AFTER_REBOOT
@@ -299,19 +164,13 @@ uint8_t initialLedBrightness = 16;                      // Initial brightness of
 uint8_t ledBrightness = initialLedBrightness;
 uint8_t nightLedBrightness = 2;                         // Brightness of Neopixel in nightmode
 
-// Automatic restart
-#ifdef SHUTDOWN_IF_SD_BOOT_FAILS
-    uint32_t deepsleepTimeAfterBootFails = 20;          // Automatic restart takes place if boot was not successful after this period (in seconds)
-#endif
 // MQTT
 bool enableMqtt = true;
 #ifdef MQTT_ENABLE
-    uint8_t mqttFailCount = 3;                          // Number of times mqtt-reconnect is allowed to fail. If >= mqttFailCount to further reconnects take place
     uint8_t const stillOnlineInterval = 60;             // Interval 'I'm still alive' is sent via MQTT (in seconds)
+    uint32_t mqttLastRetryTimestamp = 0;
 #endif
 
-// RFID
-#define RFID_SCAN_INTERVAL 300                          // in ms
 uint8_t const cardIdSize = 4;                           // RFID
 // Volume
 uint8_t maxVolume = 21;                                 // Current maximum volume that can be adjusted
@@ -322,7 +181,7 @@ uint8_t initVolume = 3;                                 // 0...21 (If not found 
     uint8_t maxVolumeHeadphone = 11;                    // Maximum volume that can be adjusted in headphone-mode (default; can be changed later via GUI)
 #endif
 // Sleep
-uint8_t maxInactivityTime = 10;                         // Time in minutes, after uC is put to deep sleep because of inactivity
+uint8_t maxInactivityTime = 10;                         // Time in minutes, after uC is put to deep sleep because of inactivity (and modified later via GUI)
 uint8_t sleepTimer = 30;                                // Sleep timer in minutes that can be optionally used (and modified later via MQTT or RFID)
 // FTP
 uint8_t ftpUserLength = 10;                             // Length will be published n-1 as maxlength to GUI
@@ -330,14 +189,6 @@ uint8_t ftpPasswordLength = 15;                         // Length will be publis
 char *ftpUser = strndup((char*) "esp32", ftpUserLength);                // FTP-user (default; can be changed later via GUI)
 char *ftpPassword = strndup((char*) "esp32", ftpPasswordLength);        // FTP-password (default; can be changed later via GUI)
 
-// Button-configuration (change according your needs)
-uint8_t buttonDebounceInterval = 50;                    // Interval in ms to software-debounce buttons
-uint16_t intervalToLongPress = 700;                     // Interval in ms to distinguish between short and long press of previous/next-button
-
-// Where to store the backup-file
-#ifndef SD_NOT_MANDATORY_ENABLE
-    static const char backupFile[] PROGMEM = "/backup.txt"; // File is written every time a (new) RFID-assignment via GUI is done
-#endif
 
 // Don't change anything here unless you know what you're doing
 // HELPER //
@@ -378,7 +229,6 @@ uint8_t currentVolume = initVolume;
 ////////////
 
 // AP-WiFi
-static const char accessPointNetworkSSID[] PROGMEM = "Tonuino";     // Access-point's SSID
 IPAddress apIP(192, 168, 4, 1);                         // Access-point's static IP
 IPAddress apNetmask(255, 255, 255, 0);                  // Access-point's netmask
 bool accessPointStarted = false;
@@ -395,28 +245,6 @@ char *mqtt_server = strndup((char*) "192.168.2.43", mqttServerLength);      // I
 char *mqttUser = strndup((char*) "mqtt-user", mqttUserLength);              // MQTT-user
 char *mqttPassword = strndup((char*) "mqtt-password", mqttPasswordLength);  // MQTT-password*/
 
-#ifdef MQTT_ENABLE
-    #define DEVICE_HOSTNAME "ESP32-Tonuino"                 // Name that that is used for MQTT
-    static const char topicSleepCmnd[] PROGMEM = "Tonuino/Cmd/Sleep";
-    static const char topicSleepState[] PROGMEM = "Tonuino/State/Sleep";
-    static const char topicTrackCmnd[] PROGMEM = "Tonuino/Cmd/Track";
-    static const char topicTrackState[] PROGMEM = "Tonuino/State/Track";
-    static const char topicTrackControlCmnd[] PROGMEM = "Tonuino/Cmd/TrackControl";
-    static const char topicLoudnessCmnd[] PROGMEM = "Tonuino/Cmd/Volume";
-    static const char topicLoudnessState[] PROGMEM = "Tonuino/State/Volume";
-    static const char topicSleepTimerCmnd[] PROGMEM = "Tonuino/Cmd/SleepTimer";
-    static const char topicSleepTimerState[] PROGMEM = "Tonuino/State/SleepTimer";
-    static const char topicState[] PROGMEM = "Tonuino/State/State";
-    static const char topicCurrentIPv4IP[] PROGMEM = "Tonuino/State/IPv4";
-    static const char topicLockControlsCmnd[] PROGMEM ="Tonuino/Cmd/LockControls";
-    static const char topicLockControlsState[] PROGMEM ="Tonuino/State/LockControls";
-    static const char topicPlaymodeState[] PROGMEM = "Tonuino/State/Playmode";
-    static const char topicRepeatModeCmnd[] PROGMEM = "Tonuino/Cmd/RepeatMode";
-    static const char topicRepeatModeState[] PROGMEM = "Tonuino/State/RepeatMode";
-    static const char topicLedBrightnessCmnd[] PROGMEM = "Tonuino/Cmd/LedBrightness";
-    static const char topicLedBrightnessState[] PROGMEM = "Tonuino/State/LedBrightness";
-    static const char topicBatteryVoltage[] PROGMEM = "Tonuino/State/Voltage";
-#endif
 
 char stringDelimiter[] = "#";                               // Character used to encapsulate data in linear NVS-strings (don't change)
 char stringOuterDelimiter[] = "^";                          // Character used to encapsulate encapsulated data along with RFID-ID in backup-file
@@ -482,9 +310,9 @@ typedef struct {
 } t_button;
 #ifdef FIVE_BUTTONS
     t_button buttons[5];
- #else
+#else
     t_button buttons[4];
- #endif
+#endif
 
 Preferences prefsRfid;
 Preferences prefsSettings;
@@ -508,9 +336,7 @@ void buttonHandler();
 void deepSleepManager(void);
 void doButtonActions(void);
 void doRfidCardModifications(const uint32_t mod);
-#ifndef SD_NOT_MANDATORY_ENABLE
-    bool dumpNvsToSd(char *_namespace, char *_destFile);
-#endif
+bool dumpNvsToSd(char *_namespace, char *_destFile);
 bool endsWith (const char *str, const char *suf);
 bool fileValid(const char *_fileItem);
 void freeMultiCharArray(char **arr, const uint32_t cnt);
@@ -629,20 +455,23 @@ void IRAM_ATTR onTimer() {
  * @param message
  */
 void createFile(fs::FS &fs, const char * path, const char * message) {
-    snprintf(logBuf, serialLoglength, "Writing file: %s\n", path);
+    //snprintf(logBuf, serialLoglength, "Writing file: %s\n", path);
+    snprintf(logBuf, serialLoglength, "%s: %s", (char *) FPSTR(writingFile), path);
     loggerNl(logBuf, LOGLEVEL_DEBUG);
     File file = fs.open(path, FILE_WRITE);
-    if(!file){
-        snprintf(logBuf, serialLoglength, "Failed to open file for writing");
+    if (!file) {
+        snprintf(logBuf, serialLoglength, "%s", (char *) FPSTR(failedOpenFileForWrite));
+        //snprintf(logBuf, serialLoglength, "Failed to open file for writing");
         loggerNl(logBuf, LOGLEVEL_ERROR);
         return;
     }
-    if(file.print(message)){
-        snprintf(logBuf, serialLoglength, "File written");
+    if (file.print(message)) {
+        //snprintf(logBuf, serialLoglength, "File written");
+        snprintf(logBuf, serialLoglength, "%s", (char *) FPSTR(fileWritten));
         loggerNl(logBuf, LOGLEVEL_DEBUG);
     } else {
-        Serial.println("Write failed");
-        snprintf(logBuf, serialLoglength, "Write failed");
+        //snprintf(logBuf, serialLoglength, "Write failed");
+        snprintf(logBuf, serialLoglength, "%s", (char *) FPSTR(writeFailed));
         loggerNl(logBuf, LOGLEVEL_ERROR);
     }
     file.close();
@@ -683,13 +512,13 @@ bool isFirstJSONtNode = true;
  */
 void appendNodeToJSONFile(fs::FS &fs, const char * path, const char *filename, const char *parent, const char *type ) {
     // Serial.printf("Appending to file: %s\n", path);
-    snprintf(logBuf, serialLoglength, "Listing directory: %s\n", filename);
+    snprintf(logBuf, serialLoglength, "%s: %s\n", (char *) FPSTR(listingDirectory), filename);
     loggerNl(logBuf, LOGLEVEL_DEBUG);
     File file = fs.open(path, FILE_APPEND);
     // i/o is timing critical keep all stuff running
     esp_task_wdt_reset();
     if (!file) {
-        snprintf(logBuf, serialLoglength, "Failed to open file for appending");
+        snprintf(logBuf, serialLoglength, (char *) FPSTR(failedToOpenFileForAppending));
         loggerNl(logBuf, LOGLEVEL_DEBUG);
         return;
     }
@@ -701,15 +530,15 @@ void appendNodeToJSONFile(fs::FS &fs, const char * path, const char *filename, c
     //TODO: write a minified json, without all those whitespaces
     //      it is just easier to debug when json is in a nice format
     //      anyway ugly but works and is stable
-    file.print(F(( "  {\n     \"id\" : \"")));
+    file.print(F("{\"id\":\""));
     file.print(filename);
-    file.print(F("\",\n     \"parent\" : \""));
+    file.print(F("\",\"parent\":\""));
     file.print(parent);
-    file.print(F("\",\n    \"type\": \""));
+    file.print(F("\",\"type\":\""));
     file.print(type);
-    file.print(F("\",\n   \"text\" : \""));
+    file.print(F("\",\"text\":\""));
     file.print(filename);
-    file.print(F("\"\n  }"));
+    file.print(F("\"}"));
     // i/o is timing critical keep all stuff running
     esp_task_wdt_reset();
     yield();
@@ -741,7 +570,8 @@ bool pathValid(const char *_fileItem) {
  * @param parent
  * @param levels
  */
-char fileNameBuf[255];
+//char fileNameBuf[255];
+char *fileNameBuf = (char *) calloc(255, sizeof(char));         // In heap to save static memory
 
 void parseSDFileList(fs::FS &fs, const char * dirname, const char * parent, uint8_t levels) {
     esp_task_wdt_reset();
@@ -749,39 +579,39 @@ void parseSDFileList(fs::FS &fs, const char * dirname, const char * parent, uint
     yield();
     File root = fs.open(dirname);
 
-    if(!root){
-        snprintf(logBuf, serialLoglength, "Failed to open directory");
+    if (!root) {
+        snprintf(logBuf, serialLoglength, (char *) FPSTR(failedToOpenDirectory));
         loggerNl(logBuf, LOGLEVEL_DEBUG);
         return;
     }
 
-    if(!root.isDirectory()){
-        snprintf(logBuf, serialLoglength, "Not a directory");
+    if (!root.isDirectory()) {
+        snprintf(logBuf, serialLoglength, (char *) FPSTR(notADirectory));
         loggerNl(logBuf, LOGLEVEL_DEBUG);
         return;
     }
     File file = root.openNextFile();
 
-    while(file){
+    while(file) {
         esp_task_wdt_reset();
         const char *parent;
 
-        if (strcmp(root.name(), "/") == 0 || root.name() == 0){
+        if (strcmp(root.name(), "/") == 0 || root.name() == 0) {
             parent = "#\0";
         } else {
             parent = root.name();
         }
-        if (file.name() == 0 ){
+        if (file.name() == 0 ) {
             continue;
         }
 
-        strncpy(fileNameBuf, (char *) file.name(), sizeof(fileNameBuf) / sizeof(fileNameBuf[0]));
+        strncpy(fileNameBuf, (char *) file.name(), 255);
 
         // we have a folder
-        if(file.isDirectory()){
+        if(file.isDirectory()) {
 
             esp_task_wdt_reset();
-            if (pathValid(fileNameBuf)){
+            if (pathValid(fileNameBuf)) {
                 sendWebsocketData(0, 31);
                 appendNodeToJSONFile(SD, DIRECTORY_INDEX_FILE, fileNameBuf, parent, "folder" );
 
@@ -793,7 +623,7 @@ void parseSDFileList(fs::FS &fs, const char * dirname, const char * parent, uint
         // we have a file
         } else {
 
-            if (fileValid(fileNameBuf)){
+            if (fileValid(fileNameBuf)) {
                 appendNodeToJSONFile(SD, DIRECTORY_INDEX_FILE, fileNameBuf, parent, "file" );
             }
         }
@@ -811,7 +641,7 @@ void parseSDFileList(fs::FS &fs, const char * dirname, const char * parent, uint
  *  is done.
  */
 void createJSONFileList() {
-    createFile(SD, DIRECTORY_INDEX_FILE, "[\n");
+    createFile(SD, DIRECTORY_INDEX_FILE, "[");
     parseSDFileList(SD,  "/", NULL, FS_DEPTH);
     appendToFile(SD, DIRECTORY_INDEX_FILE, "]");
     isFirstJSONtNode  =  true;
@@ -828,12 +658,8 @@ void fileHandlingTask(void *arguments) {
 // Measures voltage of a battery as per interval or after bootup (after allowing a few seconds to settle down)
 #ifdef MEASURE_BATTERY_VOLTAGE
     float measureBatteryVoltage(void) {
-        #ifdef LOLIN_D32_PRO
-            return (float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue * voltageFactor;
-        #else
-            float factor = 1 / ((float) r1/(r1+r2));
-            return ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
-        #endif
+        float factor = 1 / ((float) rdiv2/(rdiv2+rdiv1));
+        return ((float) analogRead(VOLTAGE_READ_PIN) / maxAnalogValue) * refVoltage * factor;
     }
 
     void batteryVoltageTester(void) {
@@ -1049,10 +875,17 @@ void postHeartbeatViaMqtt(void) {
     Manages MQTT-subscriptions.
 */
 bool reconnect() {
-  uint8_t maxRetries = 10;
   uint8_t connect = false;
+  uint8_t i = 0;
 
-  while (!MQTTclient.connected() && mqttFailCount < maxRetries) {
+  if (!mqttLastRetryTimestamp || millis() - mqttLastRetryTimestamp >= mqttRetryInterval * 1000) {
+      mqttLastRetryTimestamp = millis();
+  } else {
+      return false;
+  }
+
+  while (!MQTTclient.connected() && i < mqttMaxRetriesPerInterval) {
+    i++;
     snprintf(logBuf, serialLoglength, "%s %s", (char *) FPSTR(tryConnectMqttS), mqtt_server);
     loggerNl(logBuf, LOGLEVEL_NOTICE);
 
@@ -1111,10 +944,8 @@ bool reconnect() {
 
         return MQTTclient.connected();
     } else {
-        snprintf(logBuf, serialLoglength, "%s: rc=%i (%d / %d)", (char *) FPSTR(mqttConnFailed), MQTTclient.state(), mqttFailCount+1, maxRetries);
+        snprintf(logBuf, serialLoglength, "%s: rc=%i (%d / %d)", (char *) FPSTR(mqttConnFailed), MQTTclient.state(), i, mqttMaxRetriesPerInterval);
         loggerNl(logBuf, LOGLEVEL_ERROR);
-        mqttFailCount++;
-        delay(500);
     }
   }
   return false;
@@ -3184,7 +3015,7 @@ void accessPointStart(const char *SSID, IPAddress ip, IPAddress netmask) {
     loggerNl(logBuf, LOGLEVEL_NOTICE);
 
     wServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-            request->send_P(200, "text/html", basicWebsite);
+            request->send_P(200, "text/html", accesspoint_HTML);
         });
 
     wServer.on("/init", HTTP_POST, [] (AsyncWebServerRequest *request) {
@@ -3196,7 +3027,7 @@ void accessPointStart(const char *SSID, IPAddress ip, IPAddress netmask) {
             prefsSettings.putString("Password", request->getParam("pwd", true)->value());
             prefsSettings.putString("Hostname", request->getParam("hostname", true)->value());
         }
-        request->send_P(200, "text/html", basicWebsite);
+        request->send_P(200, "text/html", accesspoint_HTML);
     });
 
     wServer.on("/restart", HTTP_GET, [] (AsyncWebServerRequest *request) {
@@ -3314,6 +3145,14 @@ wl_status_t wifiManager(void) {
         } else { // Starts AP if WiFi-connect wasn't successful
             accessPointStart((char *) FPSTR(accessPointNetworkSSID), apIP, apNetmask);
         }
+
+        #ifdef MDNS_ENABLE
+        // zero conf, make device available as <hostname>.local
+        if (MDNS.begin(hostname.c_str())) {
+            MDNS.addService("http", "tcp", 80);
+        }
+        #endif
+
         wifiNeedsRestart = false;
     }
 
@@ -3422,7 +3261,7 @@ bool processJsonRequest(char *_serialJson) {
         // Check if settings were written successfully
         if (prefsSettings.getUInt("initVolume", 0) != iVol ||
             prefsSettings.getUInt("maxVolumeSp", 0) != mVolSpeaker ||
-            prefsSettings.getUInt("maxVolumeHp", 0) != mVolHeadphone |
+            prefsSettings.getUInt("maxVolumeHp", 0) != mVolHeadphone ||
             prefsSettings.getUChar("iLedBrightness", 0) != iBright ||
             prefsSettings.getUChar("nLedBrightness", 0) != nBright ||
             prefsSettings.getUInt("mInactiviyT", 0) != iTime ||
@@ -3474,9 +3313,7 @@ bool processJsonRequest(char *_serialJson) {
         if (s.compareTo(rfidString)) {
             return false;
         }
-        #ifndef SD_NOT_MANDATORY_ENABLE
-            dumpNvsToSd("rfidTags", (char *) FPSTR(backupFile));        // Store backup-file every time when a new rfid-tag is programmed
-        #endif
+        dumpNvsToSd("rfidTags", (char *) FPSTR(backupFile));        // Store backup-file every time when a new rfid-tag is programmed
 
     } else if (doc.containsKey("rfidAssign")) {
         const char *_rfidIdAssinId = object["rfidAssign"]["rfidIdMusic"];
@@ -3492,9 +3329,7 @@ bool processJsonRequest(char *_serialJson) {
         if (s.compareTo(rfidString)) {
             return false;
         }
-        #ifndef SD_NOT_MANDATORY_ENABLE
-            dumpNvsToSd("rfidTags", (char *) FPSTR(backupFile));                     // Store backup-file every time when a new rfid-tag is programmed
-        #endif
+        dumpNvsToSd("rfidTags", (char *) FPSTR(backupFile));                     // Store backup-file every time when a new rfid-tag is programmed
 
     } else if (doc.containsKey("wifiConfig")) {
         const char *_ssid = object["wifiConfig"]["ssid"];
@@ -3532,7 +3367,7 @@ bool processJsonRequest(char *_serialJson) {
     return true;
 }
 
-
+char *jBuf = (char *) calloc(255, sizeof(char));        // In heap to save static memory
 // Sends JSON-answers via websocket
 void sendWebsocketData(uint32_t client, uint8_t code) {
     const size_t CAPACITY = JSON_OBJECT_SIZE(1) + 20;
@@ -3547,14 +3382,15 @@ void sendWebsocketData(uint32_t client, uint8_t code) {
         object["rfidId"] = currentRfidTagId;
     } else if (code == 20) {
         object["pong"] = "pong";
-    } else if (code == 30){
+    } else if (code == 30) {
         object["refreshFileList"] = "ready";
-    }else if (code == 31){
+    } else if (code == 31) {
         object["indexingState"] = fileNameBuf;
     }
 
-    char jBuf[255];
-    serializeJson(doc, jBuf, sizeof(jBuf) / sizeof(jBuf[0]));
+    //char jBuf[255];
+
+    serializeJson(doc, jBuf, 255);
 
     if (client == 0) {
         ws.printfAll(jBuf);
@@ -3673,7 +3509,7 @@ void webserverStart(void) {
     wServer.addHandler(&events);
 
     wServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/html", mgtWebsite, templateProcessor);
+        request->send_P(200, "text/html", management_HTML, templateProcessor);
     });
 
     wServer.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
@@ -3687,7 +3523,7 @@ void webserverStart(void) {
     });
 
     wServer.on("/files", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(SD, "/files.json", "application/json");
+        request->send(SD, DIRECTORY_INDEX_FILE, "application/json");
     });
 
     wServer.onNotFound(notFound);
@@ -3701,7 +3537,6 @@ void webserverStart(void) {
 
 
 // Dumps all RFID-entries from NVS into a file on SD-card
-#ifndef SD_NOT_MANDATORY_ENABLE
     bool dumpNvsToSd(char *_namespace, char *_destFile) {
         esp_partition_iterator_t pi;                // Iterator for find
         const esp_partition_t* nvs;                 // Pointer to partition struct
@@ -3765,7 +3600,6 @@ void webserverStart(void) {
         backupFile.close();
         return true;
     }
-#endif
 
 
 // Handles uploaded backup-file and writes valid entries into NVS
@@ -3883,9 +3717,6 @@ void setup() {
     #endif
             loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
             delay(500);
-            #ifdef SD_NOT_MANDATORY_ENABLE
-                break;
-            #endif
             #ifdef SHUTDOWN_IF_SD_BOOT_FAILS
                 if (millis() >= deepsleepTimeAfterBootFails*1000) {
                     loggerNl((char *) FPSTR(sdBootFailedDeepsleep), LOGLEVEL_ERROR);
