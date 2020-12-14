@@ -4,6 +4,7 @@
 #ifndef FIVE_BUTTONS
     #include <ESP32Encoder.h>
 #endif
+#include "Arduino.h"
 #include <WiFi.h>
 #ifdef MDNS_ENABLE
     #include <ESPmDNS.h>
@@ -817,7 +818,9 @@ void doButtonActions(void) {
                                 float voltage = measureBatteryVoltage();
                                 snprintf(logBuf, serialLoglength, "%s: %.2f V", (char *) FPSTR(currentVoltageMsg), voltage);
                                 loggerNl(logBuf, LOGLEVEL_INFO);
-                                showLedVoltage = true;
+                                #ifdef NEOPIXEL_ENABLE
+                                    showLedVoltage = true;
+                                #endif
                                 #ifdef MQTT_ENABLE
                                     char vstr[6];
                                     snprintf(vstr, 6, "%.2f", voltage);
@@ -2227,6 +2230,7 @@ void showLed(void *parameter) {
                     vTaskDelay(portTICK_RATE_MS * 5);
                 }
         }
+        vTaskDelay(portTICK_RATE_MS * 10);
         esp_task_wdt_reset();
     }
     vTaskDelete(NULL);
@@ -3061,7 +3065,7 @@ wl_status_t wifiManager(void) {
         // Get (optional) hostname-configration from NVS
         String hostname = prefsSettings.getString("Hostname", "-1");
         if (hostname.compareTo("-1")) {
-            WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+            //WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
             WiFi.setHostname(hostname.c_str());
             snprintf(logBuf, serialLoglength, "%s: %s", (char *) FPSTR(restoredHostnameFromNvs), hostname.c_str());
             loggerNl(logBuf, LOGLEVEL_INFO);
@@ -3935,8 +3939,6 @@ void setup() {
         1 /* Core where the task should run */
     );
 
-
-    //esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
 
     // Activate internal pullups for all buttons
     #ifdef FIVE_BUTTONS
