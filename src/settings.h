@@ -1,7 +1,7 @@
 #include "Arduino.h"
 
 //########################## MODULES #################################
-//#define MDNS_ENABLE                 // When enabled, you don't have to handle with Tonuino's IP-address. If hostname is set to "tonuino", you can reach it via tonuino.local
+#define MDNS_ENABLE                 // When enabled, you don't have to handle with Tonuino's IP-address. If hostname is set to "tonuino", you can reach it via tonuino.local
 #define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
 #define FTP_ENABLE                  // Enables FTP-server
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
@@ -16,7 +16,7 @@
 //#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
 
 // my ones
-#define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
+//#define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
 #define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
 #define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, INSTEAD of rotary encoder (its still WIP !!!)
 
