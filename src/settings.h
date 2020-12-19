@@ -1,7 +1,7 @@
 #include "Arduino.h"
 
 //########################## MODULES #################################
-#define MDNS_ENABLE                 // When enabled, you don't have to handle with Tonuino's IP-address. If hostname is set to "tonuino", you can reach it via tonuino.local
+//#define MDNS_ENABLE                 // When enabled, you don't have to handle with Tonuino's IP-address. If hostname is set to "tonuino", you can reach it via tonuino.local
 #define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
 #define FTP_ENABLE                  // Enables FTP-server
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
@@ -20,21 +20,40 @@
 #define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
 #define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, INSTEAD of rotary encoder (its still WIP !!!)
 
+//################## select SD card mode #############################
+//#define SD_MMC_1BIT_MODE          // run SD card in SD-MMC 1Bit mode => if not enabled, SPI is used as default
+
+//################## select RFID reader ##############################
+// => make sure to enable only ONE reader at once!
+#define RFID_READER_TYPE_MFRC522    // use MFRC522 (this is so to say the default as this reader is used by most users)
+//#define RFID_READER_TYPE_PN5180   // use PN5180 (better reader but needs more pins!)
+
+
 //################## GPIO-configuration ##############################
-// uSD-card-reader (via SPI)
-#ifdef LOLIN_D32_PRO
-    #define SPISD_CS                        4           // GPIO for chip select (SD)
-    #ifndef SINGLE_SPI_ENABLE
-        #define SPISD_MOSI                  23          // GPIO for master out slave in (SD) => not necessary for single-SPI
-        #define SPISD_MISO                  19          // GPIO for master in slave ou (SD) => not necessary for single-SPI
-        #define SPISD_SCK                   18          // GPIO for clock-signal (SD) => not necessary for single-SPI
-    #endif
+#ifdef SD_MMC_1BIT_MODE
+    // Nothing to be configured here as GPIO-pins of SD_MMC are *fixed*
+    // uSD-card-reader (via SD-MMC 1Bit)
+    //
+    // SD_MMC uses fixed pins
+    //  MOSI    15
+    //  SCKK    14
+    //  MISO    2   // hardware pullup may required
 #else
-    #define SPISD_CS                        15          // GPIO for chip select (SD)
-    #ifndef SINGLE_SPI_ENABLE
-        #define SPISD_MOSI                  13          // GPIO for master out slave in (SD) => not necessary for single-SPI
-        #define SPISD_MISO                  16          // GPIO for master in slave ou (SD) => not necessary for single-SPI
-        #define SPISD_SCK                   14          // GPIO for clock-signal (SD) => not necessary for single-SPI
+    // uSD-card-reader (if SPI is used; these GPIOs can be changed)
+    #ifdef LOLIN_D32_PRO
+        #define SPISD_CS                        4           // GPIO for chip select (SD)
+        #ifndef SINGLE_SPI_ENABLE
+            #define SPISD_MOSI                  23          // GPIO for master out slave in (SD) => not necessary for single-SPI
+            #define SPISD_MISO                  19          // GPIO for master in slave ou (SD) => not necessary for single-SPI
+            #define SPISD_SCK                   18          // GPIO for clock-signal (SD) => not necessary for single-SPI
+        #endif
+    #else
+        #define SPISD_CS                        15          // GPIO for chip select (SD)
+        #ifndef SINGLE_SPI_ENABLE
+            #define SPISD_MOSI                  13          // GPIO for master out slave in (SD) => not necessary for single-SPI
+            #define SPISD_MISO                  16          // GPIO for master in slave ou (SD) => not necessary for single-SPI
+            #define SPISD_SCK                   14          // GPIO for clock-signal (SD) => not necessary for single-SPI
+        #endif
     #endif
 #endif
 
@@ -50,6 +69,11 @@
     #define RFID_MOSI                       23          // GPIO for master out slave in (RFID)
     #define RFID_MISO                       19          // GPIO for master in slave out (RFID)
     #define RFID_SCK                        18          // GPIO for clock-signal (RFID)
+#endif
+
+#ifdef RFID_READER_TYPE_PN5180
+    #define RFID_BUSY                   16          // PN5180 BUSY PIN
+    #define RFID_RST                    22          // PN5180 RESET PIN
 #endif
 
 // I2S (DAC)

@@ -6,7 +6,7 @@
 
 ## Features
 * Fits Wemos Lolin D32 (not Lolin32, Lolin D32 pro or Lolin 32 lite!)
-* Outer diameter: 55 x 81mm
+* Outer diameter: 53 x 81mm
 * JST-PH 2.0-connectors for buttons, rotary encoder, Neopixel, RFID and reset (not 2.54mm pitch!)
 * 2.54mm-connectors for MAX98357a and uSD-card-reader
 * Mosfet-circuit that switches off MAX98357a, Neopixel, headphone-pcb and uSD-card-reader automatically when deepsleep is active
@@ -23,6 +23,7 @@
 ## Things to mention
 * Better don't solder Lolin D32 directly to the PCB. I recommend to make use of female connectors instead (link below).
 * When ordering a LiPo-battery, make sure to use [one](https://www.eremit.de/p/eremit-3-7v-2500mah-lipo-104050-jst-ph-2-0mm) with deep discharge protection! This is really really really important!!!
+* Doesn't (currently) support SD-MMC and RFID-reader PN5180
 
 ## Hardware-setup
 The heart of my project is an ESP32 on a [Wemos Lolin D32 development-board](https://de.aliexpress.com/item/32808551116.html). Make sure to install the drivers for the USB/Serial-chip (CP2102 e.g.).
