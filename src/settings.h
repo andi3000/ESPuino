@@ -1,239 +1,206 @@
-#include "Arduino.h"
+#ifndef __ESPUINO_SETTINGS_H__
+#define __ESPUINO_SETTINGS_H__
+    #include "Arduino.h"
+    #include "values.h"
 
-//########################## MODULES #################################
-//#define MDNS_ENABLE                 // When enabled, you don't have to handle with Tonuino's IP-address. If hostname is set to "tonuino", you can reach it via tonuino.local
-#define MQTT_ENABLE                 // Make sure to configure mqtt-server and (optionally) username+pwd
-#define FTP_ENABLE                  // Enables FTP-server
-#define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS if enabled
-//#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
-#define LANGUAGE 1                  // 1 = deutsch; 2 = english
-//#define HEADPHONE_ADJUST_ENABLE     // Used to adjust (lower) volume for optional headphone-pcb (refer maxVolumeSpeaker / maxVolumeHeadphone)
-#define SHUTDOWN_IF_SD_BOOT_FAILS   // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
-#define MEASURE_BATTERY_VOLTAGE     // Enables battery-measurement via GPIO (ADC) and voltage-divider
-#define PLAY_LAST_RFID_AFTER_REBOOT // When restarting Tonuino, the last RFID that was active before, is recalled and played
+    //######################### INFOS ####################################
+    // This is the general configfile for ESPuino-configuration.
 
-//#define SINGLE_SPI_ENABLE         // If only one SPI-instance should be used instead of two (not yet working!)
-//#define BLUETOOTH_ENABLE          // Doesn't work currently (so don't enable) as there's not enough DRAM available
-
-// my ones
-//#define REMOTE_DEBUG_ENABLE         // Debugging via 'telnet <ip>'
-#define LOLIN_D32_PRO               // Toggle to make it work for Lolin D32 Pro (with built in SD card reader)
-#define FIVE_BUTTONS                // Use momentary push buttons for volume adjustment, INSTEAD of rotary encoder (its still WIP !!!)
-
-//################## select SD card mode #############################
-//#define SD_MMC_1BIT_MODE          // run SD card in SD-MMC 1Bit mode => if not enabled, SPI is used as default
-
-//################## select RFID reader ##############################
-// => make sure to enable only ONE reader at once!
-#define RFID_READER_TYPE_MFRC522    // use MFRC522 (this is so to say the default as this reader is used by most users)
-//#define RFID_READER_TYPE_PN5180   // use PN5180 (better reader but needs more pins!)
+    //################## HARDWARE-PLATFORM ###############################
+    /* Make sure to also edit the configfile, that is specific for your platform.
+    If in doubts (your develboard is not listed) use HAL 1
+    1: Wemos Lolin32             => settings-lolin32.h
+    2: ESP32-A1S Audiokit        => settings-espa1s.h
+    3: Wemos Lolin D32           => settings-lolin_D32.h
+    4: Wemos Lolin D32 pro       => settings-lolin_D32_pro.h
+    99: custom                   => settings-custom.h
+    more to come...
+    */
+    #define HAL 1                // HAL 1 = LoLin32, 2 = ESP32-A1S-AudioKit, 3 = Lolin D32, 4 = Lolin D32 pro; 99 = custom
 
 
-//################## GPIO-configuration ##############################
-#ifdef SD_MMC_1BIT_MODE
-    // Nothing to be configured here as GPIO-pins of SD_MMC are *fixed*
-    // uSD-card-reader (via SD-MMC 1Bit)
-    //
-    // SD_MMC uses fixed pins
-    //  MOSI    15
-    //  SCKK    14
-    //  MISO    2   // hardware pullup may required
-#else
-    // uSD-card-reader (if SPI is used; these GPIOs can be changed)
-    #ifdef LOLIN_D32_PRO
-        #define SPISD_CS                        4           // GPIO for chip select (SD)
-        #ifndef SINGLE_SPI_ENABLE
-            #define SPISD_MOSI                  23          // GPIO for master out slave in (SD) => not necessary for single-SPI
-            #define SPISD_MISO                  19          // GPIO for master in slave ou (SD) => not necessary for single-SPI
-            #define SPISD_SCK                   18          // GPIO for clock-signal (SD) => not necessary for single-SPI
+    //########################## MODULES #################################
+    #define MDNS_ENABLE                     // When enabled, you don't have to handle with ESPuino's IP-address. If hostname is set to "ESPuino", you can reach it via ESPuino.local
+    #define MQTT_ENABLE                     // Make sure to configure mqtt-server and (optionally) username+pwd
+    #define FTP_ENABLE                      // Enables FTP-server; DON'T FORGET TO ACTIVATE AFTER BOOT BY PRESSING PAUSE + NEXT-BUTTONS (IN PARALLEL)!
+    #define NEOPIXEL_ENABLE                 // Don't forget configuration of NUM_LEDS if enabled
+    //#define NEOPIXEL_REVERSE_ROTATION     // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+    #define LANGUAGE 1                      // 1 = deutsch; 2 = english
+    //#define STATIC_IP_ENABLE              // Enables static IP-configuration (change static ip-section accordingly)
+    //#define HEADPHONE_ADJUST_ENABLE       // Used to adjust (lower) volume for optional headphone-pcb (refer maxVolumeSpeaker / maxVolumeHeadphone)
+    #define SHUTDOWN_IF_SD_BOOT_FAILS       // Will put ESP to deepsleep if boot fails due to SD. Really recommend this if there's in battery-mode no other way to restart ESP! Interval adjustable via deepsleepTimeAfterBootFails.
+    #define MEASURE_BATTERY_VOLTAGE         // Enables battery-measurement via GPIO (ADC) and voltage-divider
+    //#define PLAY_LAST_RFID_AFTER_REBOOT   // When restarting ESPuino, the last RFID that was active before, is recalled and played
+    //#define USE_LAST_VOLUME_AFTER_REBOOT  // Remembers the volume used at last shutdown after reboot
+    #define USEROTARY_ENABLE                // If rotary-encoder is used (don't forget to review WAKEUP_BUTTON if you disable this feature!)
+    #define BLUETOOTH_ENABLE                // If enabled and bluetooth-mode is active, you can stream to your ESPuino via bluetooth (a2dp-sink).
+    //#define IR_CONTROL_ENABLE             // Enables remote control
+
+
+    //################## select SD card mode #############################
+    //#define SD_MMC_1BIT_MODE              // run SD card in SD-MMC 1Bit mode
+    //#define SINGLE_SPI_ENABLE             // If only one SPI-instance should be used instead of two (not yet working!) (Works on ESP32-A1S with RFID via I2C)
+
+
+    //################## select RFID reader ##############################
+    #define RFID_READER_TYPE_MFRC522_SPI    // use MFRC522 via SPI
+    //#define RFID_READER_TYPE_MFRC522_I2C  // use MFRC522 via I2C
+    //#define RFID_READER_TYPE_PN5180       // use PN5180
+
+    #ifdef RFID_READER_TYPE_PN5180
+        //#define PN5180_ENABLE_LPCD        // enable PN5180 low power card detection. Wakes up ESPuino if RFID-tag was applied while deepsleep is active.
+    #endif
+
+    #ifdef RFID_READER_TYPE_MFRC522_SPI
+        uint8_t rfidGain = 0x07 << 4;      // Sensitivity of RC522. For possible values see reference: https://forum.espuino.de/uploads/default/original/1X/9de5f8d35cbc123c1378cad1beceb3f51035cec0.png
+    #endif
+
+
+    //################## BUTTON-Layout ##################################
+    /* German documentation: https://forum.espuino.de/t/das-dynamische-button-layout/224
+    Please note the following numbers as you need to know them in order to define actions for buttons.
+    Even if you don't use all of them, their numbers won't change
+        0: NEXT_BUTTON
+        1: PREVIOUS_BUTTON
+        2: PAUSEPLAY_BUTTON
+        3: DREHENCODER_BUTTON
+        4: BUTTON_4
+        5: BUTTON_5
+
+    Don't forget to enable/configure those buttons you want to use in your develboard-specific config (e.g. settings-custom.h)
+
+    Single-buttons [can be long or short] (examples):
+        BUTTON_0_SHORT => Button 0 (NEXT_BUTTON) pressed shortly
+        BUTTON_3_SHORT => Button 3 (DREHENCODER_BUTTON) pressed shortly
+        BUTTON_4_LONG => Button 4 (BUTTON_4) pressed long
+
+    Multi-buttons [short only] (examples):
+        BUTTON_MULTI_01 => Buttons 0+1 (NEXT_BUTTON + PREVIOUS_BUTTON) pressed in parallel
+        BUTTON_MULTI_23 => Buttons 0+2 (NEXT_BUTTON + PAUSEPLAY_BUTTON) pressed in parallel
+
+    Actions:
+        To all of those buttons, an action can be assigned freely.
+        Please have a look at values.h to look up actions available (>=100 can be used)
+        If you don't want to assign an action or you don't use a given button: CMD_NOTHING has to be set
+    */
+    // *****BUTTON*****        *****ACTION*****
+    #define BUTTON_0_SHORT    CMD_NEXTTRACK
+    #define BUTTON_1_SHORT    CMD_PREVTRACK
+    #define BUTTON_2_SHORT    CMD_PLAYPAUSE
+    #define BUTTON_3_SHORT    CMD_MEASUREBATTERY
+    #define BUTTON_4_SHORT    CMD_NOTHING
+    #define BUTTON_5_SHORT    CMD_NOTHING
+
+    #define BUTTON_0_LONG     CMD_LASTTRACK
+    #define BUTTON_1_LONG     CMD_FIRSTTRACK
+    #define BUTTON_2_LONG     CMD_PLAYPAUSE
+    #define BUTTON_3_LONG     CMD_SLEEPMODE
+    #define BUTTON_4_LONG     CMD_NOTHING
+    #define BUTTON_5_LONG     CMD_NOTHING
+
+    #define BUTTON_MULTI_01   TOGGLE_WIFI_STATUS
+    #define BUTTON_MULTI_02   ENABLE_FTP_SERVER
+    #define BUTTON_MULTI_03   CMD_NOTHING
+    #define BUTTON_MULTI_04   CMD_NOTHING
+    #define BUTTON_MULTI_05   CMD_NOTHING
+    #define BUTTON_MULTI_12   CMD_NOTHING
+    #define BUTTON_MULTI_13   CMD_NOTHING
+    #define BUTTON_MULTI_14   CMD_NOTHING
+    #define BUTTON_MULTI_15   CMD_NOTHING
+    #define BUTTON_MULTI_23   CMD_NOTHING
+    #define BUTTON_MULTI_24   CMD_NOTHING
+    #define BUTTON_MULTI_25   CMD_NOTHING
+    #define BUTTON_MULTI_34   CMD_NOTHING
+    #define BUTTON_MULTI_35   CMD_NOTHING
+    #define BUTTON_MULTI_45   CMD_NOTHING
+
+    //#################### Various settings ##############################
+    // Loglevels available (don't change!)
+    #define LOGLEVEL_ERROR                  1           // only errors
+    #define LOGLEVEL_NOTICE                 2           // errors + important messages
+    #define LOGLEVEL_INFO                   3           // infos + errors + important messages
+    #define LOGLEVEL_DEBUG                  4           // almost everything
+
+    // Serial-logging-configuration
+    const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for serial console
+
+    // Static ip-configuration
+    #ifdef STATIC_IP_ENABLE
+        IPAddress local_IP(192, 168, 2, 100);           // ESPuino's IP
+        IPAddress gateway(192, 168, 2, 1);              // IP of the gateway/router
+        IPAddress subnet(255, 255, 255, 0);             // Netmask of your network (/24 => 255.255.255.0)
+        IPAddress primaryDNS(192, 168, 2, 1);           // DNS-server of your network; in private networks it's usually the gatewy's IP
+    #endif
+
+    // Buttons (better leave unchanged if in doubts :-))
+    uint8_t buttonDebounceInterval = 50;                // Interval in ms to software-debounce buttons
+    uint16_t intervalToLongPress = 700;                 // Interval in ms to distinguish between short and long press of previous/next-button
+
+    // RFID
+    #define RFID_SCAN_INTERVAL 300                      // Interval-time in ms (how often is RFID read?)
+
+    // Automatic restart
+    #ifdef SHUTDOWN_IF_SD_BOOT_FAILS
+        uint32_t deepsleepTimeAfterBootFails = 20;      // Automatic restart takes place if boot was not successful after this period (in seconds)
+    #endif
+
+    // FTP
+    // Nothing to be configured here...
+    // Default user/password is esp32/esp32 but can be changed via webgui
+
+    // ESPuino will create a WiFi if joing existing WiFi was not possible. Name can be configured here.
+    static const char accessPointNetworkSSID[] PROGMEM = "ESPuino";     // Access-point's SSID
+    static const char nameBluetoothDevice[] PROGMEM = "ESPuino";        // Name of your ESPuino as Bluetooth-device
+
+    // Where to store the backup-file for NVS-records
+    static const char backupFile[] PROGMEM = "/backup.txt"; // File is written every time a (new) RFID-assignment via GUI is done
+
+
+    //#################### Settings for optional Modules##############################
+    // (optinal) Neopixel
+    #ifdef NEOPIXEL_ENABLE
+        #define NUM_LEDS                    24          // number of LEDs
+        #define CHIPSET                     WS2812B     // type of Neopixel
+        #define COLOR_ORDER                 GRB
+    #endif
+
+    // (optional) Default-voltages for battery-monitoring via Neopixel
+    float warningLowVoltage = 3.4;                      // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel (can be changed via GUI!)
+    uint8_t voltageCheckInterval = 10;                  // How of battery-voltage is measured (in minutes) (can be changed via GUI!)
+    float voltageIndicatorLow = 3.0;                    // Lower range for Neopixel-voltage-indication (0 leds) (can be changed via GUI!)
+    float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-voltage-indication (all leds) (can be changed via GUI!)
+
+    // (optinal) Headphone-detection (leave unchanged if in doubts...)
+    #ifdef HEADPHONE_ADJUST_ENABLE
+        uint16_t headphoneLastDetectionDebounce = 1000; // Debounce-interval in ms when plugging in headphone
+    #endif
+
+    // (optional) Topics for MQTT
+    #ifdef MQTT_ENABLE
+        uint16_t mqttRetryInterval = 60;                // Try to reconnect to MQTT-server every (n) seconds if connection is broken
+        uint8_t mqttMaxRetriesPerInterval = 1;          // Number of retries per time-interval (mqttRetryInterval). mqttRetryInterval 60 / mqttMaxRetriesPerInterval 1 => once every 60s
+        #define DEVICE_HOSTNAME "ESP32-ESPuino"         // Name that is used for MQTT
+        static const char topicSleepCmnd[] PROGMEM = "Cmnd/ESPuino/Sleep";
+        static const char topicSleepState[] PROGMEM = "State/ESPuino/Sleep";
+        static const char topicRfidCmnd[] PROGMEM = "Cmnd/ESPuino/Rfid";
+        static const char topicRfidState[] PROGMEM = "State/ESPuino/Rfid";
+        static const char topicTrackState[] PROGMEM = "State/ESPuino/Track";
+        static const char topicTrackControlCmnd[] PROGMEM = "Cmnd/ESPuino/TrackControl";
+        static const char topicLoudnessCmnd[] PROGMEM = "Cmnd/ESPuino/Loudness";
+        static const char topicLoudnessState[] PROGMEM = "State/ESPuino/Loudness";
+        static const char topicSleepTimerCmnd[] PROGMEM = "Cmnd/ESPuino/SleepTimer";
+        static const char topicSleepTimerState[] PROGMEM = "State/ESPuino/SleepTimer";
+        static const char topicState[] PROGMEM = "State/ESPuino/State";
+        static const char topicCurrentIPv4IP[] PROGMEM = "State/ESPuino/IPv4";
+        static const char topicLockControlsCmnd[] PROGMEM ="Cmnd/ESPuino/LockControls";
+        static const char topicLockControlsState[] PROGMEM ="State/ESPuino/LockControls";
+        static const char topicPlaymodeState[] PROGMEM = "State/ESPuino/Playmode";
+        static const char topicRepeatModeCmnd[] PROGMEM = "Cmnd/ESPuino/RepeatMode";
+        static const char topicRepeatModeState[] PROGMEM = "State/ESPuino/RepeatMode";
+        static const char topicLedBrightnessCmnd[] PROGMEM = "Cmnd/ESPuino/LedBrightness";
+        static const char topicLedBrightnessState[] PROGMEM = "State/ESPuino/LedBrightness";
+        #ifdef MEASURE_BATTERY_VOLTAGE
+            static const char topicBatteryVoltage[] PROGMEM = "State/ESPuino/Voltage";
         #endif
-    #else
-        #define SPISD_CS                        15          // GPIO for chip select (SD)
-        #ifndef SINGLE_SPI_ENABLE
-            #define SPISD_MOSI                  13          // GPIO for master out slave in (SD) => not necessary for single-SPI
-            #define SPISD_MISO                  16          // GPIO for master in slave ou (SD) => not necessary for single-SPI
-            #define SPISD_SCK                   14          // GPIO for clock-signal (SD) => not necessary for single-SPI
-        #endif
-    #endif
-#endif
-
-// RFID (via SPI)
-#define RFID_RST                            99          // Not necessary but has to be set anyway; so let's use a dummy-number
-#ifdef LOLIN_D32_PRO
-    #define RFID_CS                         2           // GPIO for chip select (RFID)
-    #define RFID_MOSI                       13          // GPIO for master out slave in (RFID)
-    #define RFID_MISO                       39          // GPIO for master in slave out (RFID)
-    #define RFID_SCK                        14          // GPIO for clock-signal (RFID)
-#else
-    #define RFID_CS                         21          // GPIO for chip select (RFID)
-    #define RFID_MOSI                       23          // GPIO for master out slave in (RFID)
-    #define RFID_MISO                       19          // GPIO for master in slave out (RFID)
-    #define RFID_SCK                        18          // GPIO for clock-signal (RFID)
-#endif
-
-#ifdef RFID_READER_TYPE_PN5180
-    #define RFID_BUSY                   16          // PN5180 BUSY PIN
-    #define RFID_RST                    22          // PN5180 RESET PIN
-#endif
-
-// I2S (DAC)
-#define I2S_DOUT                        25          // Digital out (I2S)
-#define I2S_BCLK                        27          // BCLK (I2S)
-#define I2S_LRC                         26          // LRC (I2S)
-
-// Rotary encoder
-#ifdef LOLIN_D32_PRO
-    #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON               0            // GPIO for volume up button
-        #define VOLUME_DOWN_BUTTON             3            // GPIO for volume down button
-    #else
-        #define DREHENCODER_CLK                 36          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT (in software or hardware)
-        #define DREHENCODER_DT                  34          // Info: Lolin D32 / Lolin D32 pro 35 are using 35 for battery-voltage-monitoring!
-        #define DREHENCODER_BUTTON              16          // Button is used to switch Tonuino on and off
-    #endif
-#else
-    #ifdef FIVE_BUTTONS
-        #define VOLUME_UP_BUTTON                0           // Pin not tested (yet), you propably need to change it
-        #define VOLUME_DOWN_BUTTON              3           // Pin not tested (yet), you propably need to change it
-    #else
-        #define DREHENCODER_CLK                 34          // If you want to reverse encoder's direction, just switch GPIOs of CLK with DT (in software or hardware)
-        #define DREHENCODER_DT                  35          // Info: Lolin D32 / Lolin D32 pro 35 are using 35 for battery-voltage-monitoring!
-        #define DREHENCODER_BUTTON              32          // Button is used to switch Tonuino on and off
-    #endif
-#endif
-
-// Control-buttons
-#ifdef LOLIN_D32_PRO
-    #define PAUSEPLAY_BUTTON                12              // GPIO to detect pause/play
-    #define NEXT_BUTTON                     32              // GPIO to detect next
-    #define PREVIOUS_BUTTON                 33              // GPIO to detect previous
-#else
-    #define PAUSEPLAY_BUTTON                5               // GPIO to detect pause/play
-    #define NEXT_BUTTON                     4               // GPIO to detect next
-    #define PREVIOUS_BUTTON                 2               // GPIO to detect previous (Important: as of 19.11.2020 changed from 33 to 2)
-#endif
-
-// (optional) Power-control
-#ifdef LOLIN_D32_PRO
-    #define POWER                           21              // GPIO used to drive transistor-circuit, that switches off peripheral devices while ESP32-deepsleep
-#else
-    #define POWER                           17              // GPIO used to drive transistor-circuit, that switches off peripheral devices while ESP32-deepsleep
-#endif
-
-// (optional) Neopixel
-#ifdef LOLIN_D32_PRO
-    #define LED_PIN                         5               // GPIO for Neopixel-signaling
-#else
-    #define LED_PIN                         12              // GPIO for Neopixel-signaling
-#endif
-
-// (optinal) Headphone-detection
-#ifdef HEADPHONE_ADJUST_ENABLE
-    #define HP_DETECT                   22          // GPIO that detects, if there's a plug in the headphone jack or not
-#endif
-
-// (optional) Monitoring of battery-voltage via ADC
-#ifdef MEASURE_BATTERY_VOLTAGE
-    #ifdef LOLIN_D32_PRO
-        #define VOLTAGE_READ_PIN            35              // GPIO used to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro as it's hard-wired there!
-    #else
-        #define VOLTAGE_READ_PIN            33              // GPIO used to monitor battery-voltage. Change to 35 if you're using Lolin D32 or Lolin D32 pro as it's hard-wired there!
-    #endif
-#endif
-
-
-//#################### Various settings ##############################
-// Loglevels available (don't change!)
-#define LOGLEVEL_ERROR                  1           // only errors
-#define LOGLEVEL_NOTICE                 2           // errors + important messages
-#define LOGLEVEL_INFO                   3           // infos + errors + important messages
-#define LOGLEVEL_DEBUG                  4           // almost everything
-
-// Serial-logging-configuration
-const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for serial console
-
-// Buttons (better leave unchanged if in doubts :-))
-uint8_t buttonDebounceInterval = 50;                // Interval in ms to software-debounce buttons
-uint16_t intervalToLongPress = 1500;                // Interval in ms to distinguish between short and long press of previous/next-button, preset= 700
-#ifdef FIVE_BUTTONS
-    uint16_t additionalShutdownInterval = 700;          // Additional interval in ms to init shutdown
-#endif
-
-// RFID
-#define RFID_SCAN_INTERVAL 300                      // Interval-time in ms (how often is RFID read?)
-
-// Automatic restart
-#ifdef SHUTDOWN_IF_SD_BOOT_FAILS
-    uint32_t deepsleepTimeAfterBootFails = 20;      // Automatic restart takes place if boot was not successful after this period (in seconds)
-#endif
-
-// FTP
-// Nothing to be configured here...
-// Default user/password is esp32/esp32 but can be changed via webgui
-
-// Tonuino will create a WiFi if joing existing WiFi was not possible. Name can be configured here.
-static const char accessPointNetworkSSID[] PROGMEM = "Tonuino";     // Access-point's SSID
-
-// Where to store the backup-file for NVS-records
-static const char backupFile[] PROGMEM = "/backup.txt"; // File is written every time a (new) RFID-assignment via GUI is done
-
-// (webgui) File Browser
-uint8_t FS_DEPTH = 5;                               // Max. recursion-depth of file tree
-const char *DIRECTORY_INDEX_FILE = "/files.json";   // Filename of files.json index file
-
-// (optinal) Neopixel
-#ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    12          // number of LEDs
-    #define CHIPSET                     WS2812B     // type of Neopixel (e.g: WS2812B, WS2812)
-    #define COLOR_ORDER                 GRB
-#endif
-
-// (optional) Default-voltages for battery-monitoring via Neopixel
-float warningLowVoltage = 3.4;                      // If battery-voltage is >= this value, a cyclic warning will be indicated by Neopixel (can be changed via GUI!)
-uint8_t voltageCheckInterval = 10;                  // How of battery-voltage is measured (in minutes) (can be changed via GUI!)
-float voltageIndicatorLow = 3.0;                    // Lower range for Neopixel-voltage-indication (0 leds) (can be changed via GUI!)
-float voltageIndicatorHigh = 4.2;                   // Upper range for Neopixel-voltage-indication (all leds) (can be changed via GUI!)
-
-// (optinal) For measuring battery-voltage a voltage-divider is necessary. Their values need to be configured here.
-#ifdef MEASURE_BATTERY_VOLTAGE
-    #ifdef LOLIN_D32_PRO
-        uint8_t rdiv1 = 126;                               // Rdiv1 of voltage-divider (kOhms) (measure exact value with multimeter!)
-        uint16_t rdiv2 = 100;                              // Rdiv2 of voltage-divider (kOhms) (measure exact value with multimeter!) => used to measure voltage via ADC!
-    #else
-        uint8_t rdiv1 = 129;                               // Rdiv1 of voltage-divider (kOhms) (measure exact value with multimeter!)
-        uint16_t rdiv2 = 389;                              // Rdiv2 of voltage-divider (kOhms) (measure exact value with multimeter!) => used to measure voltage via ADC!
-    #endif
-#endif
-
-// (optinal) Headphone-detection (leave unchanged if in doubts...)
-#ifdef HEADPHONE_ADJUST_ENABLE
-    uint16_t headphoneLastDetectionDebounce = 1000; // Debounce-interval in ms when plugging in headphone
-#endif
-
-// (optional) Topics for MQTT
-#ifdef MQTT_ENABLE
-    uint16_t mqttRetryInterval = 15;                // Try to reconnect to MQTT-server every (n) seconds if connection is broken
-    uint8_t mqttMaxRetriesPerInterval = 1;          // Number of retries per time-interval (mqttRetryInterval). mqttRetryInterval 15 / mqttMaxRetriesPerInterval 1 => once every 15s
-    #define DEVICE_HOSTNAME "Tonuino"                 // Name that that is used for MQTT
-    static const char topicSleepCmnd[] PROGMEM = "Cmnd/Tonuino/Sleep";
-    static const char topicSleepState[] PROGMEM = "State/Tonuino/Sleep";
-    static const char topicTrackCmnd[] PROGMEM = "Cmnd/Tonuino/Track";
-    static const char topicTrackState[] PROGMEM = "State/Tonuino/Track";
-    static const char topicTrackControlCmnd[] PROGMEM = "Cmnd/Tonuino/TrackControl";
-    static const char topicLoudnessCmnd[] PROGMEM = "Cmnd/Tonuino/Loudness";
-    static const char topicLoudnessState[] PROGMEM = "State/Tonuino/Loudness";
-    static const char topicSleepTimerCmnd[] PROGMEM = "Cmnd/Tonuino/SleepTimer";
-    static const char topicSleepTimerState[] PROGMEM = "State/Tonuino/SleepTimer";
-    static const char topicState[] PROGMEM = "State/Tonuino/State";
-    static const char topicCurrentIPv4IP[] PROGMEM = "State/Tonuino/IPv4";
-    static const char topicLockControlsCmnd[] PROGMEM ="Cmnd/Tonuino/LockControls";
-    static const char topicLockControlsState[] PROGMEM ="State/Tonuino/LockControls";
-    static const char topicPlaymodeState[] PROGMEM = "State/Tonuino/Playmode";
-    static const char topicRepeatModeCmnd[] PROGMEM = "Cmnd/Tonuino/RepeatMode";
-    static const char topicRepeatModeState[] PROGMEM = "State/Tonuino/RepeatMode";
-    static const char topicLedBrightnessCmnd[] PROGMEM = "Cmnd/Tonuino/LedBrightness";
-    static const char topicLedBrightnessState[] PROGMEM = "State/Tonuino/LedBrightness";
-    #ifdef MEASURE_BATTERY_VOLTAGE
-        static const char topicBatteryVoltage[] PROGMEM = "State/Tonuino/Voltage";
     #endif
 #endif
