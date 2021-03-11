@@ -16,11 +16,11 @@
     99: custom                   => settings-custom.h
     more to come...
     */
-    #define HAL 1                // HAL 1 = LoLin32, 2 = ESP32-A1S-AudioKit, 3 = Lolin D32, 4 = Lolin D32 pro; 99 = custom
+    #define HAL 4                // HAL 1 = LoLin32, 2 = ESP32-A1S-AudioKit, 3 = Lolin D32, 4 = Lolin D32 pro; 99 = custom
 
 
     //########################## MODULES #################################
-    #define MDNS_ENABLE                     // When enabled, you don't have to handle with ESPuino's IP-address. If hostname is set to "ESPuino", you can reach it via ESPuino.local
+    //#define MDNS_ENABLE                     // When enabled, you don't have to handle with ESPuino's IP-address. If hostname is set to "ESPuino", you can reach it via ESPuino.local
     #define MQTT_ENABLE                     // Make sure to configure mqtt-server and (optionally) username+pwd
     #define FTP_ENABLE                      // Enables FTP-server; DON'T FORGET TO ACTIVATE AFTER BOOT BY PRESSING PAUSE + NEXT-BUTTONS (IN PARALLEL)!
     #define NEOPIXEL_ENABLE                 // Don't forget configuration of NUM_LEDS if enabled
@@ -32,7 +32,7 @@
     #define MEASURE_BATTERY_VOLTAGE         // Enables battery-measurement via GPIO (ADC) and voltage-divider
     //#define PLAY_LAST_RFID_AFTER_REBOOT   // When restarting ESPuino, the last RFID that was active before, is recalled and played
     //#define USE_LAST_VOLUME_AFTER_REBOOT  // Remembers the volume used at last shutdown after reboot
-    #define USEROTARY_ENABLE                // If rotary-encoder is used (don't forget to review WAKEUP_BUTTON if you disable this feature!)
+    //#define USEROTARY_ENABLE                // If rotary-encoder is used (don't forget to review WAKEUP_BUTTON if you disable this feature!)
     #define BLUETOOTH_ENABLE                // If enabled and bluetooth-mode is active, you can stream to your ESPuino via bluetooth (a2dp-sink).
     //#define IR_CONTROL_ENABLE             // Enables remote control
 
@@ -88,8 +88,8 @@
     #define BUTTON_1_SHORT    CMD_PREVTRACK
     #define BUTTON_2_SHORT    CMD_PLAYPAUSE
     #define BUTTON_3_SHORT    CMD_MEASUREBATTERY
-    #define BUTTON_4_SHORT    CMD_NOTHING
-    #define BUTTON_5_SHORT    CMD_NOTHING
+    #define BUTTON_4_SHORT    CMD_VOLUMEUP
+    #define BUTTON_5_SHORT    CMD_VOLUMEDOWN
 
     #define BUTTON_0_LONG     CMD_LASTTRACK
     #define BUTTON_1_LONG     CMD_FIRSTTRACK

@@ -58,12 +58,12 @@
     #define NEXT_BUTTON                      0          // Button 0: GPIO to detect next
     #define PREVIOUS_BUTTON                  2          // Button 1: GPIO to detect previous (Important: as of 19.11.2020 changed from 33 to 2; make sure to change in SD-MMC-mode)
     #define PAUSEPLAY_BUTTON                32          // Button 2: GPIO to detect pause/play
-    #define BUTTON_4                        99          // Button 4: unnamed optional button
-    #define BUTTON_5                        99          // Button 5: unnamed optional button
+    #define BUTTON_4                        34          // Button 4: GPIO to volume up
+    #define BUTTON_5                        36          // Button 5: GPIO to volume down
 
     // Wake-up button
     // Please note: only RTC-GPIOs (0, 4, 12, 13, 14, 15, 25, 26, 27, 32, 33, 34, 35, 36, 39, 99) can be used! Set to 99 to disable.
-    #define WAKEUP_BUTTON                   DREHENCODER_BUTTON // Defines the button that is used to wake up ESPuino from deepsleep.
+    #define WAKEUP_BUTTON                   PAUSEPLAY_BUTTON // Defines the button that is used to wake up ESPuino from deepsleep.
 
     // (optional) Power-control
     #define POWER                           5           // GPIO used to drive transistor-circuit, that switches off peripheral devices while ESP32-deepsleep
