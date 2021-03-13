@@ -32,10 +32,10 @@
 
     // RFID (via SPI)
     #define RST_PIN                         99          // Not necessary but has to be set anyway; so let's use a dummy-number
-    #define RFID_CS                         21          // GPIO for chip select (RFID)
-    #define RFID_MOSI                       13          // GPIO for master out slave in (RFID)
-    #define RFID_MISO                       15          // GPIO for master in slave out (RFID)
+    #define RFID_CS                         13 //21          // GPIO for chip select (RFID)
     #define RFID_SCK                        14          // GPIO for clock-signal (RFID)
+    #define RFID_MOSI                       13          // GPIO for master out slave in (RFID)
+    #define RFID_MISO                       39 //15          // GPIO for master in slave out (RFID)
 
     #ifdef RFID_READER_TYPE_PN5180
         #define RFID_BUSY                   33          // PN5180 BUSY PIN
@@ -43,9 +43,9 @@
         #define RFID_IRQ                    39          // PN5180 IRQ PIN (only needed for low power card detection)
     #endif
     // I2S (DAC)
-    #define I2S_DOUT                        25          // Digital out (I2S)
-    #define I2S_BCLK                        27          // BCLK (I2S)
     #define I2S_LRC                         26          // LRC (I2S)
+    #define I2S_BCLK                        27          // BCLK (I2S)
+    #define I2S_DOUT                        25          // Digital out (I2S)
 
     // Rotary encoder
     #ifdef USEROTARY_ENABLE
@@ -58,8 +58,8 @@
     #define NEXT_BUTTON                      0          // Button 0: GPIO to detect next
     #define PREVIOUS_BUTTON                  2          // Button 1: GPIO to detect previous (Important: as of 19.11.2020 changed from 33 to 2; make sure to change in SD-MMC-mode)
     #define PAUSEPLAY_BUTTON                32          // Button 2: GPIO to detect pause/play
-    #define BUTTON_4                        34          // Button 4: GPIO to volume up
-    #define BUTTON_5                        36          // Button 5: GPIO to volume down
+    #define BUTTON_4                        34          // Button 4: GPIO to volume up with (10k-pullup-resistor)
+    #define BUTTON_5                        36          // Button 5: GPIO to volume down (with 10k-pullup-resistor)
 
     // Wake-up button
     // Please note: only RTC-GPIOs (0, 4, 12, 13, 14, 15, 25, 26, 27, 32, 33, 34, 35, 36, 39, 99) can be used! Set to 99 to disable.
