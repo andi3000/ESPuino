@@ -66,10 +66,10 @@
     #define WAKEUP_BUTTON                   PAUSEPLAY_BUTTON // Defines the button that is used to wake up ESPuino from deepsleep.
 
     // (optional) Power-control
-    #define POWER                           5           // GPIO used to drive transistor-circuit, that switches off peripheral devices while ESP32-deepsleep
+    #define POWER                           21          // GPIO used to drive transistor-circuit, that switches off peripheral devices while ESP32-deepsleep
 
     // (optional) Neopixel
-    #define LED_PIN                         12          // GPIO for Neopixel-signaling
+    #define LED_PIN                         5           // GPIO for Neopixel-signaling
 
     // (optinal) Headphone-detection
     #ifdef HEADPHONE_ADJUST_ENABLE
